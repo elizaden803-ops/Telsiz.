@@ -1,0 +1,306 @@
+// TELSİZ — internet üzərində qrup rabitə serveri, lisenziya + admin sistemi ilə
+// Yerli işə salınma: npm install && node server.js
+
+const http = require('http');
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
+const { WebSocketServer } = require('ws');
+const QRCode = require('qrcode');
+
+const PORT = process.env.PORT || 3000;
+const PUBLIC_DIR = __dirname;
+const DATA_DIR = path.join(__dirname, 'data');
+const LICENSE_FILE = path.join(DATA_DIR, 'license.json');
+const HISTORY_LIMIT = 60;
+const DEMO_DAYS = 30;
+
+// ⚠️ Master/qurucu kod — bunu bilən proqramı hər yerdə lisenziyalaya
+// (və ya lisenziyanı silə) bilər. Render-in "Environment" bölməsində
+// MASTER_CODE adlı dəyər qoysan, kod repo-da heç görünməz (tövsiyə olunur).
+const MASTER_CODE = process.env.MASTER_CODE || '212500032Na';
+
+const MIME = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'application/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.png': 'image/png',
+  '.svg': 'image/svg+xml',
+  '.ico': 'image/x-icon',
+  '.webmanifest': 'application/manifest+json',
+};
+
+// ---------- Lisenziya ----------
+function loadLicense() {
+  try {
+    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+    if (fs.existsSync(LICENSE_FILE)) {
+      const data = JSON.parse(fs.readFileSync(LICENSE_FILE, 'utf8'));
+      if (data && data.firstStart) return data;
+    }
+  } catch (e) { /* davam et, aşağıda yeni yaradılacaq */ }
+  const fresh = { firstStart: Date.now(), licensed: false, licensedAt: null };
+  saveLicense(fresh);
+  return fresh;
+}
+function saveLicense(data) {
+  try {
+    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(LICENSE_FILE, JSON.stringify(data));
+  } catch (e) { console.error('Lisenziya faylı yazıla bilmədi:', e.message); }
+}
+
+let license = loadLicense();
+
+function licenseStatus() {
+  const elapsedDays = (Date.now() - license.firstStart) / (1000 * 60 * 60 * 24);
+  const daysLeft = Math.max(0, Math.ceil(DEMO_DAYS - elapsedDays));
+  const demoExpired = !license.licensed && daysLeft <= 0;
+  return { licensed: !!license.licensed, demoDaysLeft: daysLeft, demoExpired, blocked: demoExpired };
+}
+
+// ---------- Otaqlar (qruplar) ----------
+// channel (group code) -> { clients: Set<ws>, history: [], adminToken, pin }
+const rooms = new Map();
+
+function getRoom(channel) {
+  if (!rooms.has(channel)) rooms.set(channel, { clients: new Set(), history: [], adminToken: null, pin: null });
+  return rooms.get(channel);
+}
+
+function presenceList(room) {
+  return [...room.clients].map(c => ({ id: c.id, name: c.name, admin: !!c.isAdmin })).filter(p => p.name);
+}
+
+function broadcastPresence(channel) {
+  const room = getRoom(channel);
+  const payload = JSON.stringify({ type: 'presence', users: presenceList(room) });
+  for (const c of room.clients) if (c.readyState === 1) c.send(payload);
+}
+
+function broadcast(channel, msgObj, excludeWs) {
+  const room = getRoom(channel);
+  const payload = JSON.stringify(msgObj);
+  for (const c of room.clients) if (c !== excludeWs && c.readyState === 1) c.send(payload);
+}
+
+function pushHistory(channel, msgObj) {
+  const room = getRoom(channel);
+  room.history.push(msgObj);
+  if (room.history.length > HISTORY_LIMIT) room.history.shift();
+}
+
+const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+function makeCode(len) {
+  let out = '';
+  const bytes = crypto.randomBytes(len);
+  for (let i = 0; i < len; i++) out += CODE_ALPHABET[bytes[i] % CODE_ALPHABET.length];
+  return out;
+}
+function freshGroupCode() {
+  let code;
+  do { code = makeCode(6); } while (rooms.has(code.toLowerCase()));
+  return code;
+}
+
+function originFor(req) {
+  const proto = req.headers['x-forwarded-proto'] || (req.socket.encrypted ? 'https' : 'http');
+  const host = req.headers['x-forwarded-host'] || req.headers.host;
+  return `${proto}://${host}`;
+}
+
+const qrCache = new Map();
+async function getQrPng(url) {
+  if (qrCache.has(url)) return qrCache.get(url);
+  const png = await QRCode.toBuffer(url, { width: 480, margin: 1, color: { dark: '#141813', light: '#eae6d9' } });
+  qrCache.set(url, png);
+  if (qrCache.size > 500) qrCache.delete(qrCache.keys().next().value);
+  return png;
+}
+
+function readJsonBody(req) {
+  return new Promise((resolve) => {
+    let body = '';
+    req.on('data', (c) => { body += c; if (body.length > 10000) req.destroy(); });
+    req.on('end', () => { try { resolve(JSON.parse(body || '{}')); } catch (e) { resolve({}); } });
+    req.on('error', () => resolve({}));
+  });
+}
+
+const server = http.createServer((req, res) => {
+  const urlObj = new URL(req.url, 'http://placeholder');
+  let reqPath = urlObj.pathname;
+  if (reqPath === '/') reqPath = '/index.html';
+
+  if (reqPath === '/api/license-status' && req.method === 'GET') {
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify(licenseStatus()));
+    return;
+  }
+
+  if (reqPath === '/api/license' && req.method === 'POST') {
+    readJsonBody(req).then((body) => {
+      const code = String(body.code || '').trim();
+      const action = body.action === 'remove' ? 'remove' : 'activate';
+      if (code !== MASTER_CODE) {
+        res.writeHead(403, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ ok: false, error: 'Yanlış kod' }));
+        return;
+      }
+      license.licensed = action === 'activate';
+      license.licensedAt = license.licensed ? Date.now() : null;
+      saveLicense(license);
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ ok: true, status: licenseStatus() }));
+    });
+    return;
+  }
+
+  if (reqPath === '/api/new-group') {
+    const st = licenseStatus();
+    if (st.blocked) {
+      res.writeHead(402, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ error: 'demo-expired' }));
+      return;
+    }
+    const code = freshGroupCode();
+    const adminToken = crypto.randomBytes(16).toString('hex');
+    rooms.set(code.toLowerCase(), { clients: new Set(), history: [], adminToken, pin: null });
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify({ code, adminToken }));
+    return;
+  }
+
+  if (reqPath === '/invite.png') {
+    const code = String(urlObj.searchParams.get('g') || '').trim();
+    if (!code) { res.writeHead(400); res.end(); return; }
+    const link = `${originFor(req)}/?g=${encodeURIComponent(code)}`;
+    getQrPng(link).then((png) => {
+      res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'no-store' });
+      res.end(png);
+    }).catch(() => { res.writeHead(500); res.end(); });
+    return;
+  }
+
+  if (reqPath === '/invite-link') {
+    const code = String(urlObj.searchParams.get('g') || '').trim();
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify({ url: `${originFor(req)}/?g=${encodeURIComponent(code)}` }));
+    return;
+  }
+
+  const filePath = path.join(PUBLIC_DIR, reqPath);
+  if (!filePath.startsWith(PUBLIC_DIR)) { res.writeHead(403); res.end('Qadağandır'); return; }
+  const ALLOWED_STATIC_FILES = new Set(['/index.html', '/sw.js', '/manifest.webmanifest', '/icon.png']);
+  if (!ALLOWED_STATIC_FILES.has(reqPath)) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); res.end('Tapılmadı'); return; }
+  fs.readFile(filePath, (err, data) => {
+    if (err) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); res.end('Tapılmadı'); return; }
+    const ext = path.extname(filePath);
+    res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream' });
+    res.end(data);
+  });
+});
+
+const wss = new WebSocketServer({ server });
+let nextId = 1;
+
+wss.on('connection', (ws) => {
+  ws.id = nextId++;
+  ws.name = null;
+  ws.channel = null;
+  ws.isAdmin = false;
+
+  ws.on('message', (raw) => {
+    let msg;
+    try { msg = JSON.parse(raw.toString()); } catch (e) { return; }
+
+    if (msg.type === 'join') {
+      const st = licenseStatus();
+      if (st.blocked) { ws.send(JSON.stringify({ type: 'error', code: 'demo-expired', text: 'Demo müddəti bitib, lisenziya kodu lazımdır.' })); return; }
+
+      const channel = String(msg.channel || '').trim().toLowerCase().slice(0, 40);
+      const name = String(msg.name || 'Naməlum').trim().slice(0, 30) || 'Naməlum';
+      if (!channel) { ws.send(JSON.stringify({ type: 'error', text: 'Qrup kodu yoxdur' })); return; }
+
+      const room = getRoom(channel);
+      if (room.pin && String(msg.pin || '') !== room.pin) {
+        ws.send(JSON.stringify({ type: 'error', code: 'wrong-pin', text: 'PIN kodu səhvdir.' }));
+        return;
+      }
+
+      ws.channel = channel;
+      ws.name = name;
+      if (room.adminToken && msg.adminToken === room.adminToken) ws.isAdmin = true;
+
+      room.clients.add(ws);
+      ws.send(JSON.stringify({ type: 'history', messages: room.history, youId: ws.id, isAdmin: ws.isAdmin }));
+      broadcastPresence(channel);
+      broadcast(channel, { type: 'system', text: `${name} qoşuldu`, ts: Date.now() }, ws);
+      return;
+    }
+
+    if (!ws.channel || !ws.name) return;
+
+    if (msg.type === 'chat') {
+      const out = { type: 'chat', id: ws.id, name: ws.name, text: String(msg.text || '').slice(0, 2000), ts: Date.now() };
+      pushHistory(ws.channel, out);
+      broadcast(ws.channel, out, null);
+      return;
+    }
+    if (msg.type === 'photo') {
+      const out = { type: 'photo', id: ws.id, name: ws.name, dataUrl: msg.dataUrl, ts: Date.now() };
+      pushHistory(ws.channel, out);
+      broadcast(ws.channel, out, null);
+      return;
+    }
+    if (msg.type === 'voice') {
+      const out = { type: 'voice', id: ws.id, name: ws.name, dataUrl: msg.dataUrl, duration: msg.duration || 0, ts: Date.now() };
+      pushHistory(ws.channel, out);
+      broadcast(ws.channel, out, null);
+      return;
+    }
+    if (msg.type === 'ptt-start') { broadcast(ws.channel, { type: 'ptt-start', id: ws.id, name: ws.name }, ws); return; }
+    if (msg.type === 'ptt-stop') { broadcast(ws.channel, { type: 'ptt-stop', id: ws.id, name: ws.name }, ws); return; }
+
+    if (msg.type === 'set-pin') {
+      if (!ws.isAdmin) return;
+      const room = getRoom(ws.channel);
+      const pin = String(msg.pin || '').trim().slice(0, 8);
+      room.pin = pin || null;
+      ws.send(JSON.stringify({ type: 'pin-updated', pin: room.pin }));
+      return;
+    }
+
+    if (msg.type === 'kick') {
+      if (!ws.isAdmin) return;
+      const room = getRoom(ws.channel);
+      const targetId = msg.targetId;
+      for (const c of room.clients) {
+        if (c.id === targetId) {
+          c.send(JSON.stringify({ type: 'kicked', by: ws.name }));
+          room.clients.delete(c);
+          broadcast(ws.channel, { type: 'system', text: `${c.name} qrupdan çıxarıldı (${ws.name})`, ts: Date.now() }, null);
+          try { c.close(); } catch (e) {}
+        }
+      }
+      broadcastPresence(ws.channel);
+      return;
+    }
+  });
+
+  ws.on('close', () => {
+    if (ws.channel) {
+      const room = getRoom(ws.channel);
+      room.clients.delete(ws);
+      broadcastPresence(ws.channel);
+      if (ws.name) broadcast(ws.channel, { type: 'system', text: `${ws.name} ayrıldı`, ts: Date.now() }, ws);
+      if (room.clients.size === 0) rooms.delete(ws.channel);
+    }
+  });
+});
+
+server.listen(PORT, '0.0.0.0', () => {
+  const st = licenseStatus();
+  console.log('TELSİZ server işə düşdü, port:', PORT, '| lisenziya:', st.licensed ? 'AKTİV' : `DEMO (${st.demoDaysLeft} gün qaldı)`);
+});

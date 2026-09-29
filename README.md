@@ -1,0 +1,101 @@
+# TELSİZ — Dünyanın hər yerindən işləyən qrup rabitəsi (lisenziyalı)
+
+WhatsApp kimi: qrup yarat, kodu/linki paylaş, kimin telefonunda kod varsa
+dünyanın istənilən yerindən yazışa, danışa (sıx-danış səs mesajı ilə),
+şəkil ata bilər.
+
+---
+
+## Lisenziya sistemi
+
+- Proqram ilk açıldığı gündən **30 gün demo** kimi tam işləyir
+- 30 gün bitəndə **master kod** daxil edilmədən işləmir (demo bitdi ekranı çıxır)
+- Master kod: **`212500032Na`**
+- Bu kodu **istənilən quraşdırmada** (istənilən müştəridə) daxil etsən:
+  - Lisenziyalı deyilsə → **aktivləşdirir** (limitsiz işləyir)
+  - Lisenziyalıdırsa → **silir** (yenidən demoya/bloklanmağa qaytarır)
+  - Yəni bu, tam səlahiyyətli **qurucu/master kodudur** — hər yerdə işləyir
+- Kod tətbiqin içində, aşağı-sol küncdəki **"⚙ Ayarlar / Lisenziya"** linkindən
+  daxil edilir (adı yazmazdan əvvəl, giriş ekranında görünür)
+- Lisenziya vəziyyəti serverin öz yaddaşında (`data/license.json`) saxlanılır —
+  server yenidən başlasa (yatıb-oyansa) belə lisenziya qalır; YALNIZ Render-də
+  tam yeni "deploy" edəndə (kodu yenidən yükləyəndə) sıfırlanır
+
+⚠️ **Vacib:** Master kodu heç kimə demə — kim bilsə, istənilən sənin satdığın
+quraşdırmanı pulsuz aça və ya lisenziyanı silə bilər.
+
+### Master kodun görünürlüyü — dəqiq izah
+- `server.js` faylı **heç vaxt internetə göndərilmir**, yalnız server-in öz
+  daxilində işləyir — saytı açan adam bunu heç cür görə bilməz
+- Yalnız GitHub repo-na giriş icazəsi olan görə bilər. Sənin repo-n **Private**-dır
+  → yalnız sən görürsən. Bunu Private saxla, naməlum adamı "collaborator" əlavə etmə
+- Əlavə qorunma istəsən: kodu repo-dan tamamilə çıxarıb, yalnız Render-in
+  "Environment" bölməsində saxlaya bilərsən —
+  Render dashboard → servisin → **Environment** → **Add Environment Variable**
+  → Key: `MASTER_CODE`, Value: (öz kodun) → **Save**. Bundan sonra bu dəyər
+  GitHub-dakı koddan asılı olmayaraq işləyir, repo-da heç görünmür.
+
+## Admin (qrup qurucusu) səlahiyyətləri
+
+Qrupu **yaradan** şəxs avtomatik admin olur (telefonunda "admin token" saxlanılır,
+kodu itirməsə admin statusu qalır). Admin:
+- Söhbətdə "SİYAHI" düyməsində hər adın yanında **"AT"** düyməsi görür —
+  basanda o adam qrupdan çıxarılır (kicked)
+- "DƏVƏT" ekranında **PIN qoya bilər** — PIN qoyulsa, o kodu bilən hər kəs
+  deyil, YALNIZ PIN-i də bilən qoşula bilər (parol kimi)
+- Adi üzvlər bu düymələri görmür
+
+## Kod gizliliyi haqqında dürüst xəbərdarlıq
+
+Brauzerdə işləyən HTML/JavaScript (index.html) İSTƏNİLƏN adam
+tərəfindən "View Source" ilə görülə bilər — bu, bütün veb saytlar üçün
+texniki reallıqdır, WhatsApp Web də daxil. Bunu 100% gizlətmək mümkün deyil.
+
+**Əsl qorunma master koddur:** kimsə HTML-i tam kopyalayıb özününkü kimi
+qoysa belə, sənin serverindəki lisenziya yoxlaması olmadan (öz backend-i
+olmadan) işə düşməyəcək — çünki bütün əsl iş (qruplar, mesajlar, lisenziya)
+serverdə baş verir, HTML sadəcə görünüşdür.
+
+---
+
+## İşə salmaq: 2 addım (dəyişməyib)
+
+### 1. GitHub-a qoy
+1. https://github.com — pulsuz hesab
+2. **+** → **New repository** → ad ver → **Create**
+3. **"uploading an existing file"** → bu zip-in içindəki BÜTÜN faylları
+   birdən sürüşdür (qovluq yoxdur, hamısı düz — mobil GitHub-da da
+   problemsiz işləyir)
+4. **Commit changes**
+
+### 2. Render-də canlıya qoy
+1. https://render.com — pulsuz hesab (GitHub ilə)
+2. **New +** → **Blueprint** → repo-nu seç → **Apply**
+3. 1-2 dəqiqəyə link hazır olacaq: `https://sənin-adın.onrender.com`
+
+## İstifadə
+
+1. Linki aç → "⚙ Ayarlar" ilə lisenziyanı yoxla/aktivləşdir (ilk 30 gün lazım deyil)
+2. Adını yaz → **"YENİ QRUP YARAT"**
+3. Kod/link/QR-ı komandaya göndər
+4. İstəsən PIN qoy (Dəvət ekranından, yalnız admin görür)
+5. Yazışma, şəkil, sıx-danış səs — hamısı işləyir
+6. Admin lazım olanda "SİYAHI"-dan kiməsə "AT" bas
+
+## Məhdudiyyətlər (dəyişməyib)
+
+- Pulsuz Render planı 15 dəqiqə boşluqdan sonra yatır (ilk açılış 20-50 san gecikir)
+- Söhbət tarixçəsi (son 60 mesaj) serverdə RAM-dadır — server yenidən
+  yığılsa (redeploy) itir; lisenziya isə diskdə qalır, itmir
+- Səs vaki-toki formatındadır (bas-danış-burax-ötür)
+
+## Fayllar
+
+```
+render.yaml              → Render "Blueprint" konfiqurasiyası
+server.js                 → server: qruplar, lisenziya, admin, PIN, QR
+package.json              → asılılıqlar (ws, qrcode)
+index.html          → bütün UI (ad → lisenziya → qrup → söhbət → admin)
+data/                      → server öz-özünə yaradır, lisenziya vəziyyəti (GitHub-a qoyma)
+TELSIZ-ISE-SAL.bat/.command → yalnız yerli test üçün (məcburi deyil)
+```

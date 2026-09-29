@@ -1,0 +1,13 @@
+{
+  "name": "telsiz-app",
+  "version": "1.0.0",
+  "description": "Yerli WiFi şəbəkəsi üzərində işləyən komanda rabitə proqramı (səs, yazışma, şəkil)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "qrcode": "^1.5.4",
+    "ws": "^8.18.0"
+  }
+}

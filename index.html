@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="az">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>TELSİZ</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#141813">
+<link rel="icon" href="icon.png">
+<link rel="apple-touch-icon" href="icon.png">
+<style>
+  :root{
+    --bg-base:#141813; --bg-panel:#1c2118; --bg-elevated:#262d21; --line:#38402f;
+    --accent-live:#ff7a29; --accent-live-dim:#7a3c17; --accent-idle:#6b7a52;
+    --text:#eae6d9; --text-muted:#8a9078; --danger:#c9524a;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0; background:var(--bg-base); color:var(--text);
+    font-family:var(--sans); -webkit-tap-highlight-color:transparent;
+    padding-top:env(safe-area-inset-top,0); padding-bottom:env(safe-area-inset-bottom,0);
+    overscroll-behavior:none;
+  }
+  #app{ display:flex; flex-direction:column; height:100vh; height:100dvh; }
+  .screen{ flex:1; display:flex; flex-direction:column; justify-content:center; padding:32px 24px; gap:20px; }
+  .brand{ font-family:var(--mono); letter-spacing:0.05em; color:var(--accent-live); font-size:13px; }
+  h1{ font-size:32px; margin:0; line-height:1.08; font-weight:600; letter-spacing:-0.01em; }
+  p.sub{ color:var(--text-muted); margin:0; font-size:15px; line-height:1.5; max-width:36ch; }
+  .field{ display:flex; flex-direction:column; gap:6px; }
+  .field label{ font-size:13px; color:var(--text-muted); }
+  .field input{
+    background:var(--bg-panel); border:1px solid var(--line); color:var(--text);
+    padding:14px; border-radius:4px; font-size:16px; font-family:var(--sans);
+    text-align:left;
+  }
+  .field input:focus{ outline:none; border-color:var(--accent-idle); }
+  .field input.code{ font-family:var(--mono); letter-spacing:0.12em; text-transform:uppercase; text-align:center; font-size:20px; }
+  .btn{
+    background:var(--accent-live); color:#1a0f06; border:none;
+    padding:16px; font-size:16px; font-weight:600; border-radius:4px; cursor:pointer;
+  }
+  .btn:disabled{ background:var(--accent-live-dim); color:#8a6448; }
+  .btn.secondary{ background:var(--bg-elevated); color:var(--text); border:1px solid var(--line); }
+  .btn.ghost{ background:none; border:none; color:var(--text-muted); text-decoration:underline; padding:6px; font-size:13px; }
+  .row2{ display:flex; gap:10px; }
+  .row2 .btn{ flex:1; }
+  .err{ color:var(--danger); font-size:13px; min-height:16px; }
+
+  .qr-wrap{ background:#eae6d9; padding:16px; border-radius:8px; display:inline-block; align-self:center; }
+  .qr-wrap img{ display:block; width:220px; height:220px; }
+  .code-box{
+    text-align:center; font-family:var(--mono); font-size:30px; letter-spacing:0.18em;
+    background:var(--bg-panel); border:1px solid var(--line); border-radius:6px; padding:14px; color:var(--accent-live);
+  }
+  .link-box{
+    background:var(--bg-panel); border:1px solid var(--line); border-radius:6px; padding:12px 14px;
+    font-family:var(--mono); font-size:13px; word-break:break-all; color:var(--text-muted);
+  }
+
+  header{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:12px 16px; background:var(--bg-panel); border-bottom:1px solid var(--line); flex-shrink:0;
+  }
+  header .ch{ font-family:var(--mono); font-size:15px; letter-spacing:0.02em; }
+  header .ch .dot{ display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--accent-idle); margin-right:8px; vertical-align:middle; }
+  header .ch.online .dot{ background:var(--accent-live); box-shadow:0 0 6px var(--accent-live); }
+  header .ch.offline .dot{ background:var(--danger); }
+  header .meta{ display:flex; align-items:center; gap:10px; font-size:13px; color:var(--text-muted); }
+  header .meta button{
+    background:none; border:1px solid var(--line); color:var(--text-muted);
+    padding:6px 10px; border-radius:4px; font-size:12px; font-family:var(--mono);
+  }
+
+  #presence{ display:none; background:var(--bg-panel); border-bottom:1px solid var(--line); padding:10px 16px; font-size:13px; color:var(--text-muted); flex-shrink:0; }
+  #presence.open{ display:block; }
+  #presence .who{ color:var(--text); }
+
+  #feed{ flex:1; overflow-y:auto; padding:14px 12px; display:flex; flex-direction:column; gap:10px; }
+  .msg{ max-width:82%; display:flex; flex-direction:column; gap:4px; }
+  .msg .who{ font-size:12px; color:var(--accent-idle); font-family:var(--mono); }
+  .msg .bubble{ background:var(--bg-panel); border:1px solid var(--line); border-radius:4px; padding:10px 12px; font-size:15px; line-height:1.4; word-break:break-word; }
+  .msg.me{ align-self:flex-end; }
+  .msg.me .bubble{ background:var(--bg-elevated); border-color:#4a5240; }
+  .msg .ts{ font-size:11px; color:var(--text-muted); font-family:var(--mono); }
+  .msg.system{ align-self:center; max-width:90%; }
+  .msg.system .bubble{ background:none; border:none; color:var(--text-muted); font-size:12px; text-align:center; padding:2px; }
+  .msg .photo{ max-width:100%; border-radius:4px; display:block; border:1px solid var(--line); }
+  .voice-clip{ display:flex; align-items:center; gap:10px; }
+  .voice-clip button{ width:34px; height:34px; border-radius:50%; border:1px solid var(--accent-live); background:none; color:var(--accent-live); font-size:14px; cursor:pointer; flex-shrink:0; }
+  .voice-clip .dur{ font-family:var(--mono); font-size:12px; color:var(--text-muted); }
+
+  #compose{ display:flex; align-items:center; gap:8px; padding:10px 12px; background:var(--bg-panel); border-top:1px solid var(--line); flex-shrink:0; }
+  #compose input[type=text]{ flex:1; background:var(--bg-elevated); border:1px solid var(--line); color:var(--text); padding:12px; border-radius:20px; font-size:15px; font-family:var(--sans); }
+  #compose input[type=text]:focus{ outline:none; }
+  #compose button.icon{ width:42px; height:42px; border-radius:50%; border:1px solid var(--line); background:var(--bg-elevated); color:var(--text); font-size:18px; flex-shrink:0; cursor:pointer; }
+  #compose button.send{ border-color:var(--accent-idle); color:var(--accent-live); }
+
+  #ptt-wrap{ padding:10px 12px 14px; background:var(--bg-panel); flex-shrink:0; }
+  #ptt{
+    width:100%; padding:18px; border-radius:8px; border:1px solid var(--accent-idle);
+    background:var(--bg-elevated); color:var(--text); font-size:15px; font-weight:600;
+    letter-spacing:0.03em; cursor:pointer; user-select:none; touch-action:none;
+    transition:background .12s, border-color .12s, color .12s;
+  }
+  #ptt.live{ background:var(--accent-live); color:#1a0f06; border-color:var(--accent-live); box-shadow:0 0 0 6px rgba(255,122,41,0.15); }
+  #ptt-status{ text-align:center; font-family:var(--mono); font-size:12px; color:var(--text-muted); margin-top:8px; min-height:16px; }
+  #ptt-status.live{ color:var(--accent-live); }
+
+  #inviteOverlay{
+    position:fixed; inset:0; background:rgba(10,12,9,0.92); display:none;
+    align-items:center; justify-content:center; padding:24px; z-index:50;
+  }
+  #inviteOverlay.open{ display:flex; }
+  #inviteOverlay .box{ max-width:360px; width:100%; display:flex; flex-direction:column; gap:16px; text-align:center; }
+
+  ::-webkit-scrollbar{ width:6px; }
+  ::-webkit-scrollbar-thumb{ background:var(--line); border-radius:3px; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div class="screen" id="screenName">
+    <div class="brand">TELSİZ</div>
+    <h1 id="nameHeading">Başlamaq üçün adını yaz</h1>
+    <p class="sub" id="nameSub">Dünyanın istənilən yerindən komandanla yazışa, danışa, şəkil ata bilərsən.</p>
+    <div class="field">
+      <label for="nameInput">Adın</label>
+      <input id="nameInput" type="text" maxlength="30" placeholder="Məs: Nurlan" autocomplete="off">
+    </div>
+    <button class="btn" id="nameNextBtn">DAVAM ET</button>
+    <a href="#" id="gearLink" class="btn ghost" style="align-self:center;">⚙ Ayarlar / Lisenziya</a>
+  </div>
+
+  <div class="screen" id="screenLicense" style="display:none;">
+    <div class="brand">TELSİZ · DEMO MÜDDƏTİ BİTİB</div>
+    <h1>Lisenziya kodu lazımdır</h1>
+    <p class="sub">30 günlük demo müddəti bitib. Davam etmək üçün master/lisenziya kodunu daxil et.</p>
+    <div class="field">
+      <label for="licenseInput">Kod</label>
+      <input id="licenseInput" type="text" autocomplete="off">
+    </div>
+    <button class="btn" id="licenseActivateBtn">AKTİVLƏŞDİR</button>
+    <div class="err" id="licenseErr"></div>
+  </div>
+
+  <div class="screen" id="screenSettings" style="display:none;">
+    <div class="brand">TELSİZ · AYARLAR</div>
+    <h1>Lisenziya</h1>
+    <p class="sub" id="settingsStatus">yüklənir...</p>
+    <div class="field">
+      <label for="settingsCodeInput">Master / lisenziya kodu</label>
+      <input id="settingsCodeInput" type="text" autocomplete="off">
+    </div>
+    <div class="row2">
+      <button class="btn" id="settingsActivateBtn">AKTİVLƏŞDİR</button>
+      <button class="btn secondary" id="settingsRemoveBtn">SİL</button>
+    </div>
+    <div class="err" id="settingsErr"></div>
+    <button class="btn ghost" id="settingsBackBtn" style="align-self:center;">← Geri</button>
+  </div>
+
+  <div class="screen" id="screenChoose" style="display:none;">
+    <div class="brand">TELSİZ</div>
+    <h1>Qrup yarat və ya qoşul</h1>
+    <p class="sub">Yeni qrup yaratsan, paylaşa biləcəyin kod/link və QR alacaqsan.</p>
+    <button class="btn" id="createBtn">YENİ QRUP YARAT</button>
+    <button class="btn secondary" id="showJoinBtn">KOD İLƏ QOŞUL</button>
+    <div class="field" id="joinCodeField" style="display:none;">
+      <label for="codeInput">Qrup kodu</label>
+      <input id="codeInput" class="code" type="text" maxlength="8" placeholder="ABC123" autocomplete="off">
+      <label for="joinPinInput" style="margin-top:8px;">PIN (əgər qoyulubsa)</label>
+      <input id="joinPinInput" class="code" type="text" maxlength="8" placeholder="——" autocomplete="off">
+      <button class="btn" id="joinCodeBtn" style="margin-top:10px;">QOŞUL</button>
+    </div>
+    <div class="err" id="chooseErr"></div>
+  </div>
+
+  <div class="screen" id="screenInvite" style="display:none;">
+    <div class="brand">TELSİZ · QRUP YARADILDI</div>
+    <h1>Komandanı dəvət et</h1>
+    <p class="sub">Bu kodu, linki və ya QR-ı paylaş — açan kimi eyni qrupa düşəcəklər.</p>
+    <div class="code-box" id="inviteCode">——————</div>
+    <div class="qr-wrap"><img id="inviteQr" alt="QR kod"></div>
+    <div class="link-box" id="inviteLink">yüklənir...</div>
+    <div class="row2">
+      <button class="btn secondary" id="copyLinkBtn">LİNKİ KOPYALA</button>
+      <button class="btn" id="enterChatBtn">SÖHBƏTƏ KEÇ</button>
+    </div>
+  </div>
+
+  <div id="main" style="display:none; flex:1; flex-direction:column; min-height:0;">
+    <header>
+      <div class="ch offline" id="chLabel"><span class="dot"></span><span id="chText">—</span></div>
+      <div class="meta">
+        <span id="onlineCount">0 nəfər</span>
+        <button id="inviteBtn">DƏVƏT</button>
+        <button id="presenceBtn">SİYAHI</button>
+        <button id="leaveBtn" style="color:var(--danger); border-color:var(--danger);">ÇIX</button>
+      </div>
+    </header>
+    <div id="presence"></div>
+    <div id="feed"></div>
+    <div id="compose">
+      <button class="icon" id="photoBtn" title="Şəkil">📷</button>
+      <input type="file" id="photoInput" accept="image/*" style="display:none">
+      <input type="text" id="textInput" placeholder="Yaz..." maxlength="2000">
+      <button class="icon send" id="sendBtn">➤</button>
+    </div>
+    <div id="ptt-wrap">
+      <button id="ptt">SIX VƏ DANIŞ</button>
+      <div id="ptt-status"></div>
+    </div>
+  </div>
+
+  <div id="inviteOverlay">
+    <div class="box">
+      <div class="brand">DƏVƏT ET</div>
+      <div class="code-box" id="ovCode">——————</div>
+      <div class="qr-wrap"><img id="ovQr" alt="QR kod"></div>
+      <div class="link-box" id="ovLink"></div>
+      <button class="btn secondary" id="ovCopyBtn">LİNKİ KOPYALA</button>
+      <div class="field" id="ovPinField" style="display:none;">
+        <label for="ovPinInput">PIN qoy (boş buraxsan PIN olmaz)</label>
+        <input id="ovPinInput" class="code" type="text" maxlength="8" placeholder="——">
+        <button class="btn secondary" id="ovPinSetBtn" style="margin-top:8px;">PIN-i TƏYİN ET</button>
+      </div>
+      <button class="btn ghost" id="ovCloseBtn">Bağla</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  var els = {
+    screenName: document.getElementById('screenName'),
+    screenChoose: document.getElementById('screenChoose'),
+    screenInvite: document.getElementById('screenInvite'),
+    main: document.getElementById('main'),
+    nameHeading: document.getElementById('nameHeading'),
+    nameSub: document.getElementById('nameSub'),
+    nameInput: document.getElementById('nameInput'),
+    nameNextBtn: document.getElementById('nameNextBtn'),
+    createBtn: document.getElementById('createBtn'),
+    showJoinBtn: document.getElementById('showJoinBtn'),
+    joinCodeField: document.getElementById('joinCodeField'),
+    codeInput: document.getElementById('codeInput'),
+    joinCodeBtn: document.getElementById('joinCodeBtn'),
+    chooseErr: document.getElementById('chooseErr'),
+    inviteCode: document.getElementById('inviteCode'),
+    inviteQr: document.getElementById('inviteQr'),
+    inviteLink: document.getElementById('inviteLink'),
+    copyLinkBtn: document.getElementById('copyLinkBtn'),
+    enterChatBtn: document.getElementById('enterChatBtn'),
+    chLabel: document.getElementById('chLabel'),
+    chText: document.getElementById('chText'),
+    onlineCount: document.getElementById('onlineCount'),
+    presenceBtn: document.getElementById('presenceBtn'),
+    presence: document.getElementById('presence'),
+    inviteBtn: document.getElementById('inviteBtn'),
+    feed: document.getElementById('feed'),
+    photoBtn: document.getElementById('photoBtn'),
+    photoInput: document.getElementById('photoInput'),
+    textInput: document.getElementById('textInput'),
+    sendBtn: document.getElementById('sendBtn'),
+    ptt: document.getElementById('ptt'),
+    pttStatus: document.getElementById('ptt-status'),
+    inviteOverlay: document.getElementById('inviteOverlay'),
+    ovCode: document.getElementById('ovCode'),
+    ovQr: document.getElementById('ovQr'),
+    ovLink: document.getElementById('ovLink'),
+    ovCopyBtn: document.getElementById('ovCopyBtn'),
+    ovCloseBtn: document.getElementById('ovCloseBtn'),
+    ovPinField: document.getElementById('ovPinField'),
+    ovPinInput: document.getElementById('ovPinInput'),
+    ovPinSetBtn: document.getElementById('ovPinSetBtn'),
+    gearLink: document.getElementById('gearLink'),
+    screenLicense: document.getElementById('screenLicense'),
+    licenseInput: document.getElementById('licenseInput'),
+    licenseActivateBtn: document.getElementById('licenseActivateBtn'),
+    licenseErr: document.getElementById('licenseErr'),
+    screenSettings: document.getElementById('screenSettings'),
+    settingsStatus: document.getElementById('settingsStatus'),
+    settingsCodeInput: document.getElementById('settingsCodeInput'),
+    settingsActivateBtn: document.getElementById('settingsActivateBtn'),
+    settingsRemoveBtn: document.getElementById('settingsRemoveBtn'),
+    settingsErr: document.getElementById('settingsErr'),
+    settingsBackBtn: document.getElementById('settingsBackBtn'),
+    joinPinInput: document.getElementById('joinPinInput'),
+  };
+
+  var ALL_SCREENS = ['screenName','screenChoose','screenInvite','screenLicense','screenSettings'];
+  var state = { ws:null, name:'', channel:'', myId:null, isAdmin:false, adminToken:null, recording:false, mediaRecorder:null, chunks:[], recStart:0, connected:false };
+  var params = new URLSearchParams(location.search);
+  var incomingCode = (params.get('g') || '').trim().toUpperCase();
+
+  els.nameInput.value = localStorage.getItem('telsiz_name') || '';
+  if (incomingCode) {
+    els.nameHeading.textContent = 'Qrupa qoşulursan';
+    els.nameSub.textContent = 'Kod: ' + incomingCode + ' — davam etmək üçün adını yaz.';
+  }
+
+  function showScreen(id){
+    ALL_SCREENS.forEach(function(s){
+      document.getElementById(s).style.display = (s === id) ? 'flex' : 'none';
+    });
+  }
+
+  // ---- Lisenziya yoxlanışı (səhifə açılanda) ----
+  function checkLicenseThenStart(){
+    fetch('/api/license-status').then(function(r){ return r.json(); }).then(function(st){
+      if (st.blocked){
+        showScreen('screenLicense');
+      } else {
+        showScreen('screenName');
+      }
+    }).catch(function(){ showScreen('screenName'); });
+  }
+  checkLicenseThenStart();
+
+  els.licenseActivateBtn.addEventListener('click', function(){
+    var code = els.licenseInput.value.trim();
+    if (!code) return;
+    fetch('/api/license', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ code: code, action: 'activate' }) })
+      .then(function(r){ return r.json(); }).then(function(d){
+        if (d.ok){ els.licenseErr.textContent=''; showScreen('screenName'); }
+        else { els.licenseErr.textContent = 'Yanlış kod.'; }
+      }).catch(function(){ els.licenseErr.textContent = 'Şəbəkə xətası.'; });
+  });
+
+  // ---- Ayarlar ekranı ----
+  els.gearLink.addEventListener('click', function(e){
+    e.preventDefault();
+    fetch('/api/license-status').then(function(r){ return r.json(); }).then(function(st){
+      els.settingsStatus.textContent = st.licensed ? 'LİSENZİYALI ✓' : ('DEMO — ' + st.demoDaysLeft + ' gün qaldı' + (st.demoExpired ? ' (bitib)' : ''));
+    });
+    showScreen('screenSettings');
+  });
+  els.settingsBackBtn.addEventListener('click', function(){ showScreen('screenName'); });
+
+  els.settingsActivateBtn.addEventListener('click', function(){ applySettingsCode('activate'); });
+  els.settingsRemoveBtn.addEventListener('click', function(){ applySettingsCode('remove'); });
+  function applySettingsCode(action){
+    var code = els.settingsCodeInput.value.trim();
+    if (!code){ els.settingsErr.textContent = 'Kod yaz.'; return; }
+    fetch('/api/license', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ code: code, action: action }) })
+      .then(function(r){ return r.json(); }).then(function(d){
+        if (d.ok){
+          els.settingsErr.textContent = '';
+          els.settingsStatus.textContent = d.status.licensed ? 'LİSENZİYALI ✓' : ('DEMO — ' + d.status.demoDaysLeft + ' gün qaldı');
+        } else {
+          els.settingsErr.textContent = 'Yanlış kod.';
+        }
+      }).catch(function(){ els.settingsErr.textContent = 'Şəbəkə xətası.'; });
+  }
+
+  els.nameNextBtn.addEventListener('click', function(){
+    var name = els.nameInput.value.trim();
+    if (!name){ els.nameInput.focus(); return; }
+    localStorage.setItem('telsiz_name', name);
+    state.name = name;
+    if (incomingCode){
+      var savedToken = localStorage.getItem('telsiz_admin_' + incomingCode);
+      joinChannel(incomingCode.toLowerCase(), incomingCode, savedToken, '');
+    } else {
+      showScreen('screenChoose');
+    }
+  });
+  els.nameInput.addEventListener('keydown', function(e){ if (e.key === 'Enter') els.nameNextBtn.click(); });
+
+  els.showJoinBtn.addEventListener('click', function(){
+    els.joinCodeField.style.display = 'flex';
+    els.codeInput.focus();
+  });
+
+  els.createBtn.addEventListener('click', function(){
+    els.createBtn.disabled = true;
+    fetch('/api/new-group').then(function(r){
+      if (r.status === 402){ els.chooseErr.textContent = 'Demo müddəti bitib — Ayarlar bölməsindən lisenziya kodu daxil et.'; els.createBtn.disabled = false; throw new Error('demo-expired'); }
+      return r.json();
+    }).then(function(data){
+      var code = data.code;
+      localStorage.setItem('telsiz_admin_' + code, data.adminToken);
+      setupInviteScreen(code);
+      showScreen('screenInvite');
+      els.createBtn.disabled = false;
+    }).catch(function(){
+      els.createBtn.disabled = false;
+    });
+  });
+
+  els.joinCodeBtn.addEventListener('click', function(){
+    var code = els.codeInput.value.trim().toUpperCase();
+    var pin = els.joinPinInput.value.trim();
+    if (!code){ els.codeInput.focus(); return; }
+    var savedToken = localStorage.getItem('telsiz_admin_' + code);
+    joinChannel(code.toLowerCase(), code, savedToken, pin);
+  });
+  els.codeInput.addEventListener('keydown', function(e){ if (e.key === 'Enter') els.joinCodeBtn.click(); });
+
+  function setupInviteScreen(code){
+    els.inviteCode.textContent = code;
+    els.inviteQr.src = '/invite.png?g=' + encodeURIComponent(code) + '&t=' + Date.now();
+    fetch('/invite-link?g=' + encodeURIComponent(code)).then(function(r){ return r.json(); }).then(function(d){
+      els.inviteLink.textContent = d.url;
+    }).catch(function(){ els.inviteLink.textContent = location.origin + '/?g=' + code; });
+    els._pendingCode = code;
+  }
+
+  els.copyLinkBtn.addEventListener('click', function(){ copyText(els.inviteLink.textContent); });
+  els.enterChatBtn.addEventListener('click', function(){
+    var savedToken = localStorage.getItem('telsiz_admin_' + els._pendingCode);
+    joinChannel(els._pendingCode.toLowerCase(), els._pendingCode, savedToken, '');
+  });
+
+  function copyText(t){
+    if (navigator.clipboard) navigator.clipboard.writeText(t).catch(function(){});
+  }
+
+  function joinChannel(channelLower, displayCode, adminToken, pin){
+    state.channel = channelLower;
+    state.adminToken = adminToken || null;
+    state.pendingPin = pin || '';
+    els.chText.textContent = displayCode;
+    ALL_SCREENS.forEach(function(s){ document.getElementById(s).style.display = 'none'; });
+    els.main.style.display = 'flex';
+    connect();
+  }
+
+  els.inviteBtn.addEventListener('click', function(){
+    var code = els.chText.textContent;
+    els.ovCode.textContent = code;
+    els.ovQr.src = '/invite.png?g=' + encodeURIComponent(code) + '&t=' + Date.now();
+    fetch('/invite-link?g=' + encodeURIComponent(code)).then(function(r){ return r.json(); }).then(function(d){
+      els.ovLink.textContent = d.url;
+    }).catch(function(){ els.ovLink.textContent = location.origin + '/?g=' + code; });
+    els.ovPinField.style.display = state.isAdmin ? 'flex' : 'none';
+    els.inviteOverlay.classList.add('open');
+  });
+  els.ovCopyBtn.addEventListener('click', function(){ copyText(els.ovLink.textContent); });
+  els.ovCloseBtn.addEventListener('click', function(){ els.inviteOverlay.classList.remove('open'); });
+  els.ovPinSetBtn.addEventListener('click', function(){
+    if (!state.ws || state.ws.readyState !== 1) return;
+    state.ws.send(JSON.stringify({ type:'set-pin', pin: els.ovPinInput.value.trim() }));
+  });
+
+  function fmtTime(ts){ var d = new Date(ts); return d.getHours().toString().padStart(2,'0') + ':' + d.getMinutes().toString().padStart(2,'0'); }
+  function scrollFeed(){ els.feed.scrollTop = els.feed.scrollHeight; }
+
+  function addSystem(text){
+    var d = document.createElement('div'); d.className = 'msg system';
+    d.innerHTML = '<div class="bubble"></div>';
+    d.querySelector('.bubble').textContent = text;
+    els.feed.appendChild(d); scrollFeed();
+  }
+  function addChat(m){
+    var mine = m.id === state.myId;
+    var wrap = document.createElement('div'); wrap.className = 'msg' + (mine ? ' me' : '');
+    var who = document.createElement('div'); who.className = 'who'; who.textContent = mine ? 'Sən' : m.name;
+    var bubble = document.createElement('div'); bubble.className = 'bubble'; bubble.textContent = m.text;
+    var ts = document.createElement('div'); ts.className = 'ts'; ts.textContent = fmtTime(m.ts);
+    wrap.appendChild(who); wrap.appendChild(bubble); wrap.appendChild(ts);
+    els.feed.appendChild(wrap); scrollFeed();
+  }
+  function addPhoto(m){
+    var mine = m.id === state.myId;
+    var wrap = document.createElement('div'); wrap.className = 'msg' + (mine ? ' me' : '');
+    var who = document.createElement('div'); who.className = 'who'; who.textContent = mine ? 'Sən' : m.name;
+    var img = document.createElement('img'); img.className = 'photo'; img.src = m.dataUrl;
+    var ts = document.createElement('div'); ts.className = 'ts'; ts.textContent = fmtTime(m.ts);
+    wrap.appendChild(who); wrap.appendChild(img); wrap.appendChild(ts);
+    els.feed.appendChild(wrap); scrollFeed();
+  }
+  function addVoice(m){
+    var mine = m.id === state.myId;
+    var wrap = document.createElement('div'); wrap.className = 'msg' + (mine ? ' me' : '');
+    var who = document.createElement('div'); who.className = 'who'; who.textContent = (mine ? 'Sən' : m.name) + ' 🔊';
+    var bubble = document.createElement('div'); bubble.className = 'bubble voice-clip';
+    var btn = document.createElement('button'); btn.textContent = '▶';
+    var dur = document.createElement('span'); dur.className = 'dur'; dur.textContent = (m.duration ? (m.duration/1000).toFixed(0) + 's' : '');
+    var audio = new Audio(m.dataUrl);
+    btn.addEventListener('click', function(){ if (audio.paused){ audio.play(); btn.textContent = '❚❚'; } else { audio.pause(); btn.textContent = '▶'; } });
+    audio.addEventListener('ended', function(){ btn.textContent = '▶'; });
+    bubble.appendChild(btn); bubble.appendChild(dur);
+    var ts = document.createElement('div'); ts.className = 'ts'; ts.textContent = fmtTime(m.ts);
+    wrap.appendChild(who); wrap.appendChild(bubble); wrap.appendChild(ts);
+    els.feed.appendChild(wrap); scrollFeed();
+  }
+  function setConnected(ok){ state.connected = ok; els.chLabel.className = 'ch ' + (ok ? 'online' : 'offline'); }
+  function updatePresence(users){
+    els.onlineCount.textContent = users.length + ' nəfər';
+    els.presence.innerHTML = '';
+    users.forEach(function(u){
+      var row = document.createElement('div');
+      row.style.display = 'flex'; row.style.alignItems = 'center'; row.style.justifyContent = 'space-between'; row.style.marginBottom = '4px';
+      var s = document.createElement('span'); s.className = 'who';
+      s.textContent = u.name + (u.admin ? ' 👑' : '') + (u.id === state.myId ? ' (sən)' : '');
+      row.appendChild(s);
+      if (state.isAdmin && u.id !== state.myId){
+        var kb = document.createElement('button');
+        kb.textContent = 'AT'; kb.style.fontSize = '11px'; kb.style.color = 'var(--danger)';
+        kb.style.background = 'none'; kb.style.border = '1px solid var(--danger)'; kb.style.borderRadius = '4px'; kb.style.padding = '3px 8px';
+        kb.addEventListener('click', function(){
+          if (!confirm(u.name + ' qrupdan çıxarılsın?')) return;
+          state.ws.send(JSON.stringify({ type:'kick', targetId: u.id }));
+        });
+        row.appendChild(kb);
+      }
+      els.presence.appendChild(row);
+    });
+  }
+
+  function connect(){
+    var proto = location.protocol === 'https:' ? 'wss://' : 'ws://';
+    var ws = new WebSocket(proto + location.host);
+    state.ws = ws;
+    ws.onopen = function(){
+      setConnected(true);
+      ws.send(JSON.stringify({ type:'join', name: state.name, channel: state.channel, adminToken: state.adminToken, pin: state.pendingPin || '' }));
+    };
+    ws.onclose = function(){ setConnected(false); setTimeout(function(){ if (state.name && state.channel) connect(); }, 1500); };
+    ws.onerror = function(){};
+    ws.onmessage = function(ev){
+      var m; try { m = JSON.parse(ev.data); } catch(e){ return; }
+      if (m.type === 'history'){
+        state.myId = m.youId;
+        state.isAdmin = !!m.isAdmin;
+        els.feed.innerHTML = '';
+        m.messages.forEach(function(x){
+          if (x.type === 'chat') addChat(x); else if (x.type === 'photo') addPhoto(x); else if (x.type === 'voice') addVoice(x);
+        });
+      } else if (m.type === 'presence'){ updatePresence(m.users); }
+      else if (m.type === 'chat'){ addChat(m); }
+      else if (m.type === 'photo'){ addPhoto(m); }
+      else if (m.type === 'voice'){ addVoice(m); }
+      else if (m.type === 'system'){ addSystem(m.text); }
+      else if (m.type === 'ptt-start'){ els.pttStatus.textContent = m.name + ' danışır...'; els.pttStatus.className = 'live'; }
+      else if (m.type === 'ptt-stop'){ if (els.pttStatus.textContent.indexOf(m.name) === 0){ els.pttStatus.textContent = ''; els.pttStatus.className = ''; } }
+      else if (m.type === 'kicked'){
+        ws.onclose = null;
+        alert('Admin (' + m.by + ') səni qrupdan çıxardı.');
+        location.href = location.pathname;
+      }
+      else if (m.type === 'pin-updated'){ els.ovPinField.style.display = state.isAdmin ? 'flex' : 'none'; }
+      else if (m.type === 'error'){
+        if (m.code === 'wrong-pin'){ els.chooseErr.textContent = m.text; ws.onclose = null; ws.close(); els.main.style.display='none'; showScreen('screenChoose'); }
+        else if (m.code === 'demo-expired'){ ws.onclose = null; ws.close(); els.main.style.display='none'; showScreen('screenLicense'); }
+        else { addSystem(m.text); }
+      }
+    };
+  }
+
+  els.sendBtn.addEventListener('click', sendText);
+  els.textInput.addEventListener('keydown', function(e){ if (e.key === 'Enter') sendText(); });
+  function sendText(){
+    var text = els.textInput.value.trim();
+    if (!text || !state.ws || state.ws.readyState !== 1) return;
+    state.ws.send(JSON.stringify({ type:'chat', text: text }));
+    els.textInput.value = '';
+  }
+
+  els.photoBtn.addEventListener('click', function(){ els.photoInput.click(); });
+  els.photoInput.addEventListener('change', function(){
+    var file = els.photoInput.files[0];
+    if (!file) return;
+    var img = new Image(); var reader = new FileReader();
+    reader.onload = function(e){
+      img.onload = function(){
+        var maxW = 1000; var scale = Math.min(1, maxW / img.width);
+        var canvas = document.createElement('canvas');
+        canvas.width = img.width * scale; canvas.height = img.height * scale;
+        var ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        var dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+        if (state.ws && state.ws.readyState === 1) state.ws.send(JSON.stringify({ type:'photo', dataUrl: dataUrl }));
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+    els.photoInput.value = '';
+  });
+
+  function startRec(){
+    if (state.recording) return;
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){ els.pttStatus.textContent = 'Mikrofon dəstəklənmir'; return; }
+    navigator.mediaDevices.getUserMedia({ audio:true }).then(function(stream){
+      state.recording = true; state.recStart = Date.now();
+      els.ptt.classList.add('live'); els.pttStatus.textContent = 'DANIŞIRSAN...'; els.pttStatus.className = 'live';
+      if (state.ws && state.ws.readyState === 1) state.ws.send(JSON.stringify({ type:'ptt-start' }));
+      var mimeType = 'audio/webm;codecs=opus';
+      if (!window.MediaRecorder || !MediaRecorder.isTypeSupported || !MediaRecorder.isTypeSupported(mimeType)) mimeType = '';
+      var mr = mimeType ? new MediaRecorder(stream, { mimeType: mimeType }) : new MediaRecorder(stream);
+      state.mediaRecorder = mr; state.chunks = [];
+      mr.ondataavailable = function(e){ if (e.data && e.data.size > 0) state.chunks.push(e.data); };
+      mr.onstop = function(){
+        stream.getTracks().forEach(function(t){ t.stop(); });
+        var duration = Date.now() - state.recStart;
+        if (duration < 300){ els.pttStatus.textContent=''; els.pttStatus.className=''; return; }
+        var blob = new Blob(state.chunks, { type: mr.mimeType || 'audio/webm' });
+        var reader = new FileReader();
+        reader.onload = function(e){
+          if (state.ws && state.ws.readyState === 1){
+            state.ws.send(JSON.stringify({ type:'voice', dataUrl: e.target.result, duration: duration }));
+            state.ws.send(JSON.stringify({ type:'ptt-stop' }));
+          }
+          els.pttStatus.textContent = ''; els.pttStatus.className = '';
+        };
+        reader.readAsDataURL(blob);
+      };
+      mr.start();
+    }).catch(function(){ els.pttStatus.textContent = 'Mikrofon icazəsi verilmədi'; });
+  }
+  function stopRec(){
+    if (!state.recording) return;
+    state.recording = false; els.ptt.classList.remove('live');
+    if (state.mediaRecorder && state.mediaRecorder.state !== 'inactive') state.mediaRecorder.stop();
+  }
+  els.ptt.addEventListener('mousedown', startRec);
+  els.ptt.addEventListener('mouseup', stopRec);
+  els.ptt.addEventListener('mouseleave', function(){ if (state.recording) stopRec(); });
+  els.ptt.addEventListener('touchstart', function(e){ e.preventDefault(); startRec(); }, { passive:false });
+  els.ptt.addEventListener('touchend', function(e){ e.preventDefault(); stopRec(); }, { passive:false });
+  els.ptt.addEventListener('touchcancel', function(){ stopRec(); });
+
+  els.presenceBtn.addEventListener('click', function(){ els.presence.classList.toggle('open'); });
+
+  var leaveBtn = document.getElementById('leaveBtn');
+  leaveBtn.addEventListener('click', function(){
+    if (!confirm('Qrupdan çıxmaq istəyirsən?')) return;
+    if (state.recording) stopRec();
+    if (state.ws) { state.ws.onclose = null; state.ws.close(); state.ws = null; }
+    state.channel = '';
+    els.feed.innerHTML = '';
+    els.presence.innerHTML = '';
+    els.presence.classList.remove('open');
+    history.replaceState(null, '', location.pathname);
+    els.main.style.display = 'none';
+    showScreen('screenChoose');
+  });
+
+  if ('serviceWorker' in navigator){
+    window.addEventListener('load', function(){ navigator.serviceWorker.register('sw.js').catch(function(){}); });
+  }
+})();
+</script>
+</body>
+</html>
