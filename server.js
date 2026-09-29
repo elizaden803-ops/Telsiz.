@@ -7,6 +7,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { WebSocketServer } = require('ws');
 const QRCode = require('qrcode');
+const webpush = require('web-push');
 
 const PORT = process.env.PORT || 3000;
 const PUBLIC_DIR = __dirname;
@@ -53,6 +54,29 @@ function saveLicense(data) {
 
 let license = loadLicense();
 
+// ---------- Push bildirişləri (VAPID) ----------
+const VAPID_FILE = path.join(DATA_DIR, 'vapid.json');
+function loadOrCreateVapid() {
+  try {
+    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+    if (fs.existsSync(VAPID_FILE)) return JSON.parse(fs.readFileSync(VAPID_FILE, 'utf8'));
+  } catch (e) {}
+  const keys = webpush.generateVAPIDKeys();
+  try { fs.writeFileSync(VAPID_FILE, JSON.stringify(keys)); } catch (e) {}
+  return keys;
+}
+const vapidKeys = loadOrCreateVapid();
+webpush.setVapidDetails('mailto:admin@telsiz.local', vapidKeys.publicKey, vapidKeys.privateKey);
+
+function notifyPush(channel, title, body) {
+  const room = getRoom(channel);
+  for (const [endpoint, sub] of room.pushSubs) {
+    webpush.sendNotification(sub, JSON.stringify({ title, body })).catch((err) => {
+      if (err && (err.statusCode === 410 || err.statusCode === 404)) room.pushSubs.delete(endpoint);
+    });
+  }
+}
+
 function licenseStatus() {
   const elapsedDays = (Date.now() - license.firstStart) / (1000 * 60 * 60 * 24);
   const daysLeft = Math.max(0, Math.ceil(DEMO_DAYS - elapsedDays));
@@ -61,11 +85,12 @@ function licenseStatus() {
 }
 
 // ---------- Otaqlar (qruplar) ----------
-// channel (group code) -> { clients: Set<ws>, history: [], adminToken, pin }
+// channel (group code) -> { clients: Set<ws>, history: [], adminTokens: Set, pin }
 const rooms = new Map();
+let nextMsgId = 1;
 
 function getRoom(channel) {
-  if (!rooms.has(channel)) rooms.set(channel, { clients: new Set(), history: [], adminToken: null, pin: null });
+  if (!rooms.has(channel)) rooms.set(channel, { clients: new Set(), history: [], adminTokens: new Set(), pin: null, pushSubs: new Map() });
   return rooms.get(channel);
 }
 
@@ -157,6 +182,25 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  if (reqPath === '/api/vapid-public-key') {
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify({ key: vapidKeys.publicKey }));
+    return;
+  }
+
+  if (reqPath === '/api/push-subscribe' && req.method === 'POST') {
+    readJsonBody(req).then((body) => {
+      const channel = String(body.channel || '').trim().toLowerCase();
+      const sub = body.subscription;
+      if (!channel || !sub || !sub.endpoint) { res.writeHead(400); res.end('{}'); return; }
+      const room = getRoom(channel);
+      room.pushSubs.set(sub.endpoint, sub);
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ ok: true }));
+    });
+    return;
+  }
+
   if (reqPath === '/api/new-group') {
     const st = licenseStatus();
     if (st.blocked) {
@@ -166,7 +210,7 @@ const server = http.createServer((req, res) => {
     }
     const code = freshGroupCode();
     const adminToken = crypto.randomBytes(16).toString('hex');
-    rooms.set(code.toLowerCase(), { clients: new Set(), history: [], adminToken, pin: null });
+    rooms.set(code.toLowerCase(), { clients: new Set(), history: [], adminTokens: new Set([adminToken]), pin: null, pushSubs: new Map() });
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
     res.end(JSON.stringify({ code, adminToken }));
     return;
@@ -231,7 +275,7 @@ wss.on('connection', (ws) => {
 
       ws.channel = channel;
       ws.name = name;
-      if (room.adminToken && msg.adminToken === room.adminToken) ws.isAdmin = true;
+      if (room.adminTokens.has(msg.adminToken)) ws.isAdmin = true;
 
       room.clients.add(ws);
       ws.send(JSON.stringify({ type: 'history', messages: room.history, youId: ws.id, isAdmin: ws.isAdmin }));
@@ -243,25 +287,36 @@ wss.on('connection', (ws) => {
     if (!ws.channel || !ws.name) return;
 
     if (msg.type === 'chat') {
-      const out = { type: 'chat', id: ws.id, name: ws.name, text: String(msg.text || '').slice(0, 2000), ts: Date.now() };
+      const out = { type: 'chat', msgId: nextMsgId++, id: ws.id, name: ws.name, text: String(msg.text || '').slice(0, 2000), ts: Date.now() };
       pushHistory(ws.channel, out);
       broadcast(ws.channel, out, null);
+      notifyPush(ws.channel, 'TELSİZ', `${ws.name}: ${out.text.slice(0, 80)}`);
       return;
     }
     if (msg.type === 'photo') {
-      const out = { type: 'photo', id: ws.id, name: ws.name, dataUrl: msg.dataUrl, ts: Date.now() };
+      const out = { type: 'photo', msgId: nextMsgId++, id: ws.id, name: ws.name, dataUrl: msg.dataUrl, ts: Date.now() };
       pushHistory(ws.channel, out);
       broadcast(ws.channel, out, null);
+      notifyPush(ws.channel, 'TELSİZ', `${ws.name} şəkil göndərdi`);
       return;
     }
     if (msg.type === 'voice') {
-      const out = { type: 'voice', id: ws.id, name: ws.name, dataUrl: msg.dataUrl, duration: msg.duration || 0, ts: Date.now() };
+      const out = { type: 'voice', msgId: nextMsgId++, id: ws.id, name: ws.name, dataUrl: msg.dataUrl, duration: msg.duration || 0, ts: Date.now() };
       pushHistory(ws.channel, out);
       broadcast(ws.channel, out, null);
+      notifyPush(ws.channel, 'TELSİZ', `${ws.name} səs mesajı göndərdi`);
       return;
     }
     if (msg.type === 'ptt-start') { broadcast(ws.channel, { type: 'ptt-start', id: ws.id, name: ws.name }, ws); return; }
     if (msg.type === 'ptt-stop') { broadcast(ws.channel, { type: 'ptt-stop', id: ws.id, name: ws.name }, ws); return; }
+
+    if (msg.type === 'sos') {
+      const lat = typeof msg.lat === 'number' ? msg.lat : null;
+      const lng = typeof msg.lng === 'number' ? msg.lng : null;
+      broadcast(ws.channel, { type: 'sos', name: ws.name, lat, lng, ts: Date.now() }, null);
+      notifyPush(ws.channel, '🚨 SOS — TELSİZ', `${ws.name} təcili kömək istəyir!`);
+      return;
+    }
 
     if (msg.type === 'set-pin') {
       if (!ws.isAdmin) return;
@@ -285,6 +340,31 @@ wss.on('connection', (ws) => {
         }
       }
       broadcastPresence(ws.channel);
+      return;
+    }
+
+    if (msg.type === 'promote') {
+      if (!ws.isAdmin) return;
+      const room = getRoom(ws.channel);
+      for (const c of room.clients) {
+        if (c.id === msg.targetId && !c.isAdmin) {
+          c.isAdmin = true;
+          const newToken = crypto.randomBytes(16).toString('hex');
+          room.adminTokens.add(newToken);
+          c.send(JSON.stringify({ type: 'promoted', adminToken: newToken, by: ws.name }));
+          broadcast(ws.channel, { type: 'system', text: `${c.name} admin edildi (${ws.name})`, ts: Date.now() }, null);
+        }
+      }
+      broadcastPresence(ws.channel);
+      return;
+    }
+
+    if (msg.type === 'delete-message') {
+      if (!ws.isAdmin) return;
+      const room = getRoom(ws.channel);
+      const msgId = msg.msgId;
+      room.history = room.history.filter(m => m.msgId !== msgId);
+      broadcast(ws.channel, { type: 'message-deleted', msgId }, null);
       return;
     }
   });

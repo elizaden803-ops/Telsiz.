@@ -199,6 +199,8 @@
         <span id="onlineCount">0 nəfər</span>
         <button id="inviteBtn">DƏVƏT</button>
         <button id="presenceBtn">SİYAHI</button>
+        <button id="notifyBtn" title="Bildirişlər">🔔</button>
+        <button id="sosBtn" style="color:#fff; background:var(--danger); border-color:var(--danger); font-weight:700;">SOS</button>
         <button id="leaveBtn" style="color:var(--danger); border-color:var(--danger);">ÇIX</button>
       </div>
     </header>
@@ -206,7 +208,7 @@
     <div id="feed"></div>
     <div id="compose">
       <button class="icon" id="photoBtn" title="Şəkil">📷</button>
-      <input type="file" id="photoInput" accept="image/*" style="display:none">
+      <input type="file" id="photoInput" accept="image/*" capture="environment" style="display:none">
       <input type="text" id="textInput" placeholder="Yaz..." maxlength="2000">
       <button class="icon send" id="sendBtn">➤</button>
     </div>
@@ -264,6 +266,8 @@
     presenceBtn: document.getElementById('presenceBtn'),
     presence: document.getElementById('presence'),
     inviteBtn: document.getElementById('inviteBtn'),
+    sosBtn: document.getElementById('sosBtn'),
+    notifyBtn: document.getElementById('notifyBtn'),
     feed: document.getElementById('feed'),
     photoBtn: document.getElementById('photoBtn'),
     photoInput: document.getElementById('photoInput'),
@@ -296,7 +300,7 @@
   };
 
   var ALL_SCREENS = ['screenName','screenChoose','screenInvite','screenLicense','screenSettings'];
-  var state = { ws:null, name:'', channel:'', myId:null, isAdmin:false, adminToken:null, recording:false, mediaRecorder:null, chunks:[], recStart:0, connected:false };
+  var state = { ws:null, name:'', channel:'', myId:null, isAdmin:false, adminToken:null, recording:false, mediaRecorder:null, chunks:[], recStart:0, connected:false, audioCtx:null };
   var params = new URLSearchParams(location.search);
   var incomingCode = (params.get('g') || '').trim().toUpperCase();
 
@@ -361,6 +365,7 @@
   }
 
   els.nameNextBtn.addEventListener('click', function(){
+    ensureAudio();
     var name = els.nameInput.value.trim();
     if (!name){ els.nameInput.focus(); return; }
     localStorage.setItem('telsiz_name', name);
@@ -453,6 +458,21 @@
   function fmtTime(ts){ var d = new Date(ts); return d.getHours().toString().padStart(2,'0') + ':' + d.getMinutes().toString().padStart(2,'0'); }
   function scrollFeed(){ els.feed.scrollTop = els.feed.scrollHeight; }
 
+  function addDeleteBtn(wrap, msgId){
+    if (!state.isAdmin || !msgId) return;
+    wrap.setAttribute('data-msgid', msgId);
+    var del = document.createElement('button');
+    del.textContent = '✕'; del.title = 'Sil';
+    del.style.cssText = 'position:absolute; top:-6px; right:-6px; width:20px; height:20px; border-radius:50%; background:var(--danger); color:#fff; border:none; font-size:11px; line-height:1; cursor:pointer;';
+    wrap.style.position = 'relative';
+    del.addEventListener('click', function(e){
+      e.stopPropagation();
+      if (!confirm('Bu mesaj silinsin?')) return;
+      if (state.ws && state.ws.readyState === 1) state.ws.send(JSON.stringify({ type:'delete-message', msgId: msgId }));
+    });
+    wrap.appendChild(del);
+  }
+
   function addSystem(text){
     var d = document.createElement('div'); d.className = 'msg system';
     d.innerHTML = '<div class="bubble"></div>';
@@ -466,7 +486,9 @@
     var bubble = document.createElement('div'); bubble.className = 'bubble'; bubble.textContent = m.text;
     var ts = document.createElement('div'); ts.className = 'ts'; ts.textContent = fmtTime(m.ts);
     wrap.appendChild(who); wrap.appendChild(bubble); wrap.appendChild(ts);
+    addDeleteBtn(wrap, m.msgId);
     els.feed.appendChild(wrap); scrollFeed();
+    if (!mine) notifyIncoming();
   }
   function addPhoto(m){
     var mine = m.id === state.myId;
@@ -475,7 +497,9 @@
     var img = document.createElement('img'); img.className = 'photo'; img.src = m.dataUrl;
     var ts = document.createElement('div'); ts.className = 'ts'; ts.textContent = fmtTime(m.ts);
     wrap.appendChild(who); wrap.appendChild(img); wrap.appendChild(ts);
+    addDeleteBtn(wrap, m.msgId);
     els.feed.appendChild(wrap); scrollFeed();
+    if (!mine) notifyIncoming();
   }
   function addVoice(m){
     var mine = m.id === state.myId;
@@ -490,8 +514,36 @@
     bubble.appendChild(btn); bubble.appendChild(dur);
     var ts = document.createElement('div'); ts.className = 'ts'; ts.textContent = fmtTime(m.ts);
     wrap.appendChild(who); wrap.appendChild(bubble); wrap.appendChild(ts);
+    addDeleteBtn(wrap, m.msgId);
     els.feed.appendChild(wrap); scrollFeed();
+    if (!mine) notifyIncoming();
   }
+  function removeMessageById(msgId){
+    var el = els.feed.querySelector('[data-msgid="' + msgId + '"]');
+    if (el) el.remove();
+  }
+
+  // ---- Bildiriş səsi/vibrasiya ----
+  function ensureAudio(){
+    if (!state.audioCtx){
+      try { state.audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e){}
+    } else if (state.audioCtx.state === 'suspended') {
+      state.audioCtx.resume();
+    }
+  }
+  function notifyIncoming(){
+    ensureAudio();
+    if (state.audioCtx){
+      try {
+        var o = state.audioCtx.createOscillator(); var g = state.audioCtx.createGain();
+        o.connect(g); g.connect(state.audioCtx.destination);
+        o.frequency.value = 880; g.gain.value = 0.12;
+        o.start(); o.stop(state.audioCtx.currentTime + 0.15);
+      } catch(e){}
+    }
+    if (navigator.vibrate) navigator.vibrate(120);
+  }
+
   function setConnected(ok){ state.connected = ok; els.chLabel.className = 'ch ' + (ok ? 'online' : 'offline'); }
   function updatePresence(users){
     els.onlineCount.textContent = users.length + ' nəfər';
@@ -511,6 +563,16 @@
           state.ws.send(JSON.stringify({ type:'kick', targetId: u.id }));
         });
         row.appendChild(kb);
+        if (!u.admin){
+          var pb = document.createElement('button');
+          pb.textContent = 'ADMİN ET'; pb.style.fontSize = '11px'; pb.style.color = 'var(--accent-live)';
+          pb.style.background = 'none'; pb.style.border = '1px solid var(--accent-live)'; pb.style.borderRadius = '4px'; pb.style.padding = '3px 8px'; pb.style.marginLeft = '6px';
+          pb.addEventListener('click', function(){
+            if (!confirm(u.name + ' admin edilsin?')) return;
+            state.ws.send(JSON.stringify({ type:'promote', targetId: u.id }));
+          });
+          row.appendChild(pb);
+        }
       }
       els.presence.appendChild(row);
     });
@@ -548,6 +610,22 @@
         location.href = location.pathname;
       }
       else if (m.type === 'pin-updated'){ els.ovPinField.style.display = state.isAdmin ? 'flex' : 'none'; }
+      else if (m.type === 'promoted'){
+        state.isAdmin = true;
+        state.adminToken = m.adminToken;
+        localStorage.setItem('telsiz_admin_' + els.chText.textContent, m.adminToken);
+        addSystem((m.by || 'Admin') + ' səni admin etdi');
+      }
+      else if (m.type === 'message-deleted'){ removeMessageById(m.msgId); }
+      else if (m.type === 'sos'){
+        playAlarm();
+        var locTxt = (m.lat != null && m.lng != null) ? (' — https://maps.google.com/?q=' + m.lat + ',' + m.lng) : ' — məkan alınmadı';
+        var d = document.createElement('div'); d.className = 'msg system';
+        var b = document.createElement('div'); b.className = 'bubble';
+        b.style.color = 'var(--danger)'; b.style.fontWeight = '700';
+        b.textContent = '🚨 SOS — ' + m.name + locTxt;
+        d.appendChild(b); els.feed.appendChild(d); scrollFeed();
+      }
       else if (m.type === 'error'){
         if (m.code === 'wrong-pin'){ els.chooseErr.textContent = m.text; ws.onclose = null; ws.close(); els.main.style.display='none'; showScreen('screenChoose'); }
         else if (m.code === 'demo-expired'){ ws.onclose = null; ws.close(); els.main.style.display='none'; showScreen('screenLicense'); }
@@ -588,13 +666,13 @@
   function startRec(){
     if (state.recording) return;
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){ els.pttStatus.textContent = 'Mikrofon dəstəklənmir'; return; }
-    navigator.mediaDevices.getUserMedia({ audio:true }).then(function(stream){
+    navigator.mediaDevices.getUserMedia({ audio: { echoCancellation:true, noiseSuppression:true, autoGainControl:true, channelCount:1 } }).then(function(stream){
       state.recording = true; state.recStart = Date.now();
       els.ptt.classList.add('live'); els.pttStatus.textContent = 'DANIŞIRSAN...'; els.pttStatus.className = 'live';
       if (state.ws && state.ws.readyState === 1) state.ws.send(JSON.stringify({ type:'ptt-start' }));
       var mimeType = 'audio/webm;codecs=opus';
       if (!window.MediaRecorder || !MediaRecorder.isTypeSupported || !MediaRecorder.isTypeSupported(mimeType)) mimeType = '';
-      var mr = mimeType ? new MediaRecorder(stream, { mimeType: mimeType }) : new MediaRecorder(stream);
+      var mr = mimeType ? new MediaRecorder(stream, { mimeType: mimeType, audioBitsPerSecond: 24000 }) : new MediaRecorder(stream, { audioBitsPerSecond: 24000 });
       state.mediaRecorder = mr; state.chunks = [];
       mr.ondataavailable = function(e){ if (e.data && e.data.size > 0) state.chunks.push(e.data); };
       mr.onstop = function(){
@@ -628,6 +706,61 @@
   els.ptt.addEventListener('touchcancel', function(){ stopRec(); });
 
   els.presenceBtn.addEventListener('click', function(){ els.presence.classList.toggle('open'); });
+
+  // ---- SOS ----
+  els.sosBtn.addEventListener('click', function(){
+    if (!confirm('SOS siqnalı bütün qrupa göndərilsin?')) return;
+    if (!state.ws || state.ws.readyState !== 1) return;
+    if (navigator.geolocation){
+      navigator.geolocation.getCurrentPosition(function(pos){
+        state.ws.send(JSON.stringify({ type:'sos', lat: pos.coords.latitude, lng: pos.coords.longitude }));
+      }, function(){
+        state.ws.send(JSON.stringify({ type:'sos', lat: null, lng: null }));
+      }, { timeout: 4000 });
+    } else {
+      state.ws.send(JSON.stringify({ type:'sos', lat: null, lng: null }));
+    }
+  });
+
+  function playAlarm(){
+    ensureAudio();
+    if (!state.audioCtx) return;
+    var t = state.audioCtx.currentTime;
+    [0, 0.3, 0.6].forEach(function(offset){
+      try {
+        var o = state.audioCtx.createOscillator(); var g = state.audioCtx.createGain();
+        o.connect(g); g.connect(state.audioCtx.destination);
+        o.frequency.value = 1200; g.gain.value = 0.2;
+        o.start(t + offset); o.stop(t + offset + 0.22);
+      } catch(e){}
+    });
+    if (navigator.vibrate) navigator.vibrate([300,100,300,100,300]);
+  }
+
+  // ---- Arxa fon bildirişi (push) ----
+  function urlBase64ToUint8Array(base64String){
+    var padding = '='.repeat((4 - base64String.length % 4) % 4);
+    var base64 = (base64String + padding).replace(/-/g,'+').replace(/_/g,'/');
+    var raw = atob(base64), out = new Uint8Array(raw.length);
+    for (var i=0;i<raw.length;i++) out[i] = raw.charCodeAt(i);
+    return out;
+  }
+  els.notifyBtn.addEventListener('click', function(){
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)){
+      alert('Bu brauzer arxa fon bildirişini dəstəkləmir.'); return;
+    }
+    Notification.requestPermission().then(function(perm){
+      if (perm !== 'granted'){ alert('Bildiriş icazəsi verilmədi.'); return; }
+      navigator.serviceWorker.ready.then(function(reg){
+        fetch('/api/vapid-public-key').then(function(r){ return r.json(); }).then(function(d){
+          return reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey: urlBase64ToUint8Array(d.key) });
+        }).then(function(sub){
+          return fetch('/api/push-subscribe', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ channel: state.channel, subscription: sub }) });
+        }).then(function(){ alert('Bildirişlər aktivdir — proqram bağlı olsa belə mesaj gələndə bildiriş alacaqsan.'); })
+          .catch(function(){ alert('Bildiriş aktivləşdirilə bilmədi.'); });
+      });
+    });
+  });
 
   var leaveBtn = document.getElementById('leaveBtn');
   leaveBtn.addEventListener('click', function(){

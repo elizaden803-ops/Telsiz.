@@ -41,6 +41,39 @@ Qrupu **yaradan** şəxs avtomatik admin olur (telefonunda "admin token" saxlan�
 kodu itirməsə admin statusu qalır). Admin:
 - Söhbətdə "SİYAHI" düyməsində hər adın yanında **"AT"** düyməsi görür —
   basanda o adam qrupdan çıxarılır (kicked)
+- Adi üzvlərin yanında **"ADMİN ET"** düyməsi ilə onları da admin edə bilər —
+  bir neçə admin ola bilər (məs. hər növbənin rəhbəri)
+- Hər mesajın (yazı/şəkil/səs) küncündə **"✕"** düyməsi ilə onu hamının
+  ekranından silə bilər
+- "DƏVƏT" ekranından **PIN qoya bilər** — PIN qoyulsa, o kodu bilən hər kəs
+  deyil, YALNIZ PIN-i də bilən qoşula bilər (parol kimi)
+- Adi üzvlər bu düymələri görmür
+
+## Digər funksiyalar
+
+- **Bildiriş (ekran açıqkən):** yeni mesaj/şəkil/səs gələndə qısa səs + vibrasiya
+- **Arxa fon bildirişi (🔔):** söhbətdə 🔔 düyməsinə bas, icazə ver — proqram
+  bağlı/minimallaşdırılmış olsa belə OS bildirişi gəlir (Android-də etibarlı,
+  iPhone-da yalnız "Ana ekrana əlavə et" edilmiş proqramda işləyir, Safari-nin
+  öz brauzer tabında YOX)
+- **SOS düyməsi:** basanda təsdiq istəyir, sonra bütün qrupa yüksək səsli
+  alarm + (icazə versən) sənin məkanını (xəritə linki) göndərir
+- **Kamera:** 📷 düyməsi telefonun kamerasını birbaşa açır (qalereya yox)
+- **Səs keyfiyyəti:** əks-səda təmizlənməsi və arxa fon küyü filtri aktivdir,
+  zəif internetdə də (aşağı bit-rate) kəsintisiz işləməyə çalışır
+
+## Native app tələb edən şeylər (bu versiyada yoxdur)
+
+Bunlar brauzer/PWA texnologiyasında mümkün deyil, yalnız App Store/Play
+Store-a yüklənən tam native proqramda edilə bilər:
+- Telefonun səs düymələrini PTT kimi təyin etmək
+- İnternetsiz, Wi-Fi Direct/Bluetooth ilə yaxın-məsafə əlaqə (mesh)
+
+
+Qrupu **yaradan** şəxs avtomatik admin olur (telefonunda "admin token" saxlanılır,
+kodu itirməsə admin statusu qalır). Admin:
+- Söhbətdə "SİYAHI" düyməsində hər adın yanında **"AT"** düyməsi görür —
+  basanda o adam qrupdan çıxarılır (kicked)
 - "DƏVƏT" ekranında **PIN qoya bilər** — PIN qoyulsa, o kodu bilən hər kəs
   deyil, YALNIZ PIN-i də bilən qoşula bilər (parol kimi)
 - Adi üzvlər bu düymələri görmür
