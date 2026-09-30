@@ -143,22 +143,33 @@
 
   <div class="screen" id="screenLicense" style="display:none;">
     <div class="brand">TELSİZ · DEMO MÜDDƏTİ BİTİB</div>
-    <h1>Lisenziya kodu lazımdır</h1>
-    <p class="sub">30 günlük demo müddəti bitib. Davam etmək üçün master/lisenziya kodunu daxil et.</p>
+    <h1>Bu qrup üçün lisenziya lazımdır</h1>
+    <p class="sub">Bu qrupun 30 günlük demo müddəti bitib. Davam etmək üçün master kodu daxil et.</p>
     <div class="field">
-      <label for="licenseInput">Kod</label>
+      <label for="licenseGroupCode">Qrup kodu</label>
+      <input id="licenseGroupCode" class="code" type="text" autocomplete="off">
+    </div>
+    <div class="field">
+      <label for="licenseInput">Master kod</label>
       <input id="licenseInput" type="text" autocomplete="off">
     </div>
     <button class="btn" id="licenseActivateBtn">AKTİVLƏŞDİR</button>
     <div class="err" id="licenseErr"></div>
+    <button class="btn ghost" id="licenseBackBtn" style="align-self:center;">← Geri</button>
   </div>
 
   <div class="screen" id="screenSettings" style="display:none;">
     <div class="brand">TELSİZ · AYARLAR</div>
-    <h1>Lisenziya</h1>
-    <p class="sub" id="settingsStatus">yüklənir...</p>
+    <h1>Lisenziya idarəsi</h1>
+    <p class="sub">Hər qrupun öz 30 günlük demosu var. Aktivləşdirmək/silmək üçün
+      həmin qrupun kodunu və master kodu yaz.</p>
     <div class="field">
-      <label for="settingsCodeInput">Master / lisenziya kodu</label>
+      <label for="settingsGroupCode">Qrup kodu</label>
+      <input id="settingsGroupCode" class="code" type="text" autocomplete="off">
+    </div>
+    <p class="sub" id="settingsStatus" style="font-size:13px;"></p>
+    <div class="field">
+      <label for="settingsCodeInput">Master kod</label>
       <input id="settingsCodeInput" type="text" autocomplete="off">
     </div>
     <div class="row2">
@@ -294,10 +305,13 @@
     ovPinSetBtn: document.getElementById('ovPinSetBtn'),
     gearLink: document.getElementById('gearLink'),
     screenLicense: document.getElementById('screenLicense'),
+    licenseGroupCode: document.getElementById('licenseGroupCode'),
     licenseInput: document.getElementById('licenseInput'),
     licenseActivateBtn: document.getElementById('licenseActivateBtn'),
     licenseErr: document.getElementById('licenseErr'),
+    licenseBackBtn: document.getElementById('licenseBackBtn'),
     screenSettings: document.getElementById('screenSettings'),
+    settingsGroupCode: document.getElementById('settingsGroupCode'),
     settingsStatus: document.getElementById('settingsStatus'),
     settingsCodeInput: document.getElementById('settingsCodeInput'),
     settingsActivateBtn: document.getElementById('settingsActivateBtn'),
@@ -324,34 +338,31 @@
     });
   }
 
-  // ---- Lisenziya yoxlanışı (səhifə açılanda) ----
-  function checkLicenseThenStart(){
-    fetch('/api/license-status').then(function(r){ return r.json(); }).then(function(st){
-      if (st.blocked){
-        showScreen('screenLicense');
-      } else {
-        showScreen('screenName');
-      }
-    }).catch(function(){ showScreen('screenName'); });
-  }
-  checkLicenseThenStart();
+  // Lisenziya artıq hər QRUP koduna görədir (bütün serverə görə deyil),
+  // ona görə səhifə açılanda ümumi yoxlama yoxdur — birbaşa ad ekranına keç.
+  showScreen('screenName');
 
   els.licenseActivateBtn.addEventListener('click', function(){
-    var code = els.licenseInput.value.trim();
-    if (!code) return;
-    fetch('/api/license', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ code: code, action: 'activate' }) })
+    var groupCode = els.licenseGroupCode.value.trim();
+    var masterCode = els.licenseInput.value.trim();
+    if (!groupCode || !masterCode){ els.licenseErr.textContent = 'Qrup kodu və master kod lazımdır.'; return; }
+    fetch('/api/license', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ groupCode: groupCode, masterCode: masterCode, action: 'activate' }) })
       .then(function(r){ return r.json(); }).then(function(d){
-        if (d.ok){ els.licenseErr.textContent=''; showScreen('screenName'); }
-        else { els.licenseErr.textContent = 'Yanlış kod.'; }
+        if (d.ok){
+          els.licenseErr.textContent = '';
+          var savedToken = localStorage.getItem('telsiz_admin_' + groupCode.toUpperCase());
+          joinChannel(groupCode.toLowerCase(), groupCode.toUpperCase(), savedToken, '');
+        } else { els.licenseErr.textContent = 'Yanlış kod.'; }
       }).catch(function(){ els.licenseErr.textContent = 'Şəbəkə xətası.'; });
   });
+  els.licenseBackBtn.addEventListener('click', function(){ showScreen('screenName'); });
 
   // ---- Ayarlar ekranı ----
   els.gearLink.addEventListener('click', function(e){
     e.preventDefault();
-    fetch('/api/license-status').then(function(r){ return r.json(); }).then(function(st){
-      els.settingsStatus.textContent = st.licensed ? 'LİSENZİYALI ✓' : ('DEMO — ' + st.demoDaysLeft + ' gün qaldı' + (st.demoExpired ? ' (bitib)' : ''));
-    });
+    els.settingsGroupCode.value = '';
+    els.settingsStatus.textContent = '';
+    els.settingsErr.textContent = '';
     showScreen('screenSettings');
   });
   els.settingsBackBtn.addEventListener('click', function(){ showScreen('screenName'); });
@@ -359,13 +370,15 @@
   els.settingsActivateBtn.addEventListener('click', function(){ applySettingsCode('activate'); });
   els.settingsRemoveBtn.addEventListener('click', function(){ applySettingsCode('remove'); });
   function applySettingsCode(action){
-    var code = els.settingsCodeInput.value.trim();
-    if (!code){ els.settingsErr.textContent = 'Kod yaz.'; return; }
-    fetch('/api/license', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ code: code, action: action }) })
+    var groupCode = els.settingsGroupCode.value.trim();
+    var masterCode = els.settingsCodeInput.value.trim();
+    if (!groupCode){ els.settingsErr.textContent = 'Qrup kodunu yaz.'; return; }
+    if (!masterCode){ els.settingsErr.textContent = 'Master kodu yaz.'; return; }
+    fetch('/api/license', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ groupCode: groupCode, masterCode: masterCode, action: action }) })
       .then(function(r){ return r.json(); }).then(function(d){
         if (d.ok){
           els.settingsErr.textContent = '';
-          els.settingsStatus.textContent = d.status.licensed ? 'LİSENZİYALI ✓' : ('DEMO — ' + d.status.demoDaysLeft + ' gün qaldı');
+          els.settingsStatus.textContent = d.status.licensed ? (groupCode.toUpperCase() + ': LİSENZİYALI ✓') : (groupCode.toUpperCase() + ': DEMO — ' + d.status.demoDaysLeft + ' gün qaldı');
         } else {
           els.settingsErr.textContent = 'Yanlış kod.';
         }
@@ -394,10 +407,7 @@
 
   els.createBtn.addEventListener('click', function(){
     els.createBtn.disabled = true;
-    fetch('/api/new-group').then(function(r){
-      if (r.status === 402){ els.chooseErr.textContent = 'Demo müddəti bitib — Ayarlar bölməsindən lisenziya kodu daxil et.'; els.createBtn.disabled = false; throw new Error('demo-expired'); }
-      return r.json();
-    }).then(function(data){
+    fetch('/api/new-group').then(function(r){ return r.json(); }).then(function(data){
       var code = data.code;
       localStorage.setItem('telsiz_admin_' + code, data.adminToken);
       setupInviteScreen(code);
@@ -645,7 +655,12 @@
       }
       else if (m.type === 'error'){
         if (m.code === 'wrong-pin'){ els.chooseErr.textContent = m.text; ws.onclose = null; ws.close(); els.main.style.display='none'; showScreen('screenChoose'); }
-        else if (m.code === 'demo-expired'){ ws.onclose = null; ws.close(); els.main.style.display='none'; showScreen('screenLicense'); }
+        else if (m.code === 'demo-expired'){
+          ws.onclose = null; ws.close(); els.main.style.display='none';
+          els.licenseGroupCode.value = (m.groupCode || state.channel).toUpperCase();
+          els.licenseErr.textContent = '';
+          showScreen('screenLicense');
+        }
         else { addSystem(m.text); }
       }
     };

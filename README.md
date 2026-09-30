@@ -6,34 +6,24 @@ dünyanın istənilən yerindən yazışa, danışa (sıx-danış səs mesajı i
 
 ---
 
-## Lisenziya sistemi
+## Lisenziya sistemi (HƏR QRUP ÜÇÜN AYRICA)
 
-- Proqram ilk açıldığı gündən **30 gün demo** kimi tam işləyir
-- 30 gün bitəndə **master kod** daxil edilmədən işləmir (demo bitdi ekranı çıxır)
-- Master kod: **`212500032Na`**
-- Bu kodu **istənilən quraşdırmada** (istənilən müştəridə) daxil etsən:
-  - Lisenziyalı deyilsə → **aktivləşdirir** (limitsiz işləyir)
-  - Lisenziyalıdırsa → **silir** (yenidən demoya/bloklanmağa qaytarır)
-  - Yəni bu, tam səlahiyyətli **qurucu/master kodudur** — hər yerdə işləyir
-- Kod tətbiqin içində, aşağı-sol küncdəki **"⚙ Ayarlar / Lisenziya"** linkindən
-  daxil edilir (adı yazmazdan əvvəl, giriş ekranında görünür)
-- Lisenziya vəziyyəti serverin öz yaddaşında (`data/license.json`) saxlanılır —
-  server yenidən başlasa (yatıb-oyansa) belə lisenziya qalır; YALNIZ Render-də
-  tam yeni "deploy" edəndə (kodu yenidən yükləyəndə) sıfırlanır
-
-⚠️ **Vacib:** Master kodu heç kimə demə — kim bilsə, istənilən sənin satdığın
-quraşdırmanı pulsuz aça və ya lisenziyanı silə bilər.
-
-### Master kodun görünürlüyü — dəqiq izah
-- `server.js` faylı **heç vaxt internetə göndərilmir**, yalnız server-in öz
-  daxilində işləyir — saytı açan adam bunu heç cür görə bilməz
-- Yalnız GitHub repo-na giriş icazəsi olan görə bilər. Sənin repo-n **Private**-dır
-  → yalnız sən görürsən. Bunu Private saxla, naməlum adamı "collaborator" əlavə etmə
-- Əlavə qorunma istəsən: kodu repo-dan tamamilə çıxarıb, yalnız Render-in
-  "Environment" bölməsində saxlaya bilərsən —
-  Render dashboard → servisin → **Environment** → **Add Environment Variable**
-  → Key: `MASTER_CODE`, Value: (öz kodun) → **Save**. Bundan sonra bu dəyər
-  GitHub-dakı koddan asılı olmayaraq işləyir, repo-da heç görünmür.
+- Hər YENİ QRUP yaradılan andan öz **30 günlük demosunu** başladır —
+  fərqli qruplar bir-birindən tam asılı deyil
+- 30 gün bitəndə həmin QRUP master kod daxil edilmədən açılmır (digər
+  qruplara təsir etmir)
+- Master kod: **`212500032Na`** — istənilən qrup üçün işləyir, amma
+  daxil edərkən HANSI qrup kodu üçün olduğunu da yazmaq lazımdır
+- Beləliklə eyni linki bir neçə müştəriyə verə bilərsən — hər biri öz
+  qrup kodunu yaradır, öz demosunu alır, sən istədiyin QRUPU ayrıca
+  lisenziyalayırsan, digərlərinə toxunmadan
+- "⚙ Ayarlar / Lisenziya" (ad ekranında) — istənilən vaxt istənilən
+  qrup kodunu yazıb aktivləşdirə/silə bilərsən (uzaqdan idarə üçün)
+- Demo bitmiş qrupa girməyə cəhd edilsə, avtomatik lisenziya ekranı
+  açılır, qrup kodu özü doldurulur — sadəcə master kodu yazmaq kifayətdir
+- Vəziyyət serverin öz yaddaşında (`data/licenses.json`) saxlanılır —
+  server yenidən başlasa (yatıb-oyansa) belə qalır; YALNIZ Render-də
+  tam yeni "deploy" edəndə sıfırlanır
 
 ## Admin (qrup qurucusu) səlahiyyətləri
 
