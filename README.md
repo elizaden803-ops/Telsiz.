@@ -6,22 +6,25 @@ dünyanın istənilən yerindən yazışa, danışa (sıx-danış səs mesajı i
 
 ---
 
-## Lisenziya sistemi (HƏR QRUP ÜÇÜN AYRICA)
+## Lisenziya sistemi (HƏR CİHAZ ÜÇÜN AYRICA)
 
-- Hər YENİ QRUP yaradılan andan öz **30 günlük demosunu** başladır —
-  fərqli qruplar bir-birindən tam asılı deyil
-- 30 gün bitəndə həmin QRUP master kod daxil edilmədən açılmır (digər
-  qruplara təsir etmir)
-- Master kod: **`212500032Na`** — istənilən qrup üçün işləyir, amma
-  daxil edərkən HANSI qrup kodu üçün olduğunu da yazmaq lazımdır
-- Beləliklə eyni linki bir neçə müştəriyə verə bilərsən — hər biri öz
-  qrup kodunu yaradır, öz demosunu alır, sən istədiyin QRUPU ayrıca
-  lisenziyalayırsan, digərlərinə toxunmadan
-- "⚙ Ayarlar / Lisenziya" (ad ekranında) — istənilən vaxt istənilən
-  qrup kodunu yazıb aktivləşdirə/silə bilərsən (uzaqdan idarə üçün)
-- Demo bitmiş qrupa girməyə cəhd edilsə, avtomatik lisenziya ekranı
-  açılır, qrup kodu özü doldurulur — sadəcə master kodu yazmaq kifayətdir
-- Vəziyyət serverin öz yaddaşında (`data/licenses.json`) saxlanılır —
+- Hər telefon/brauzer ilk dəfə sayta girdiyi andan öz **30 günlük demosunu**
+  başladır (brauzerin öz yaddaşında gizli nişanla tanınır) — fərqli cihazlar
+  bir-birindən tam asılı deyil
+- Bir cihaz lisenziyalı olduqdan sonra həmin cihazdan istədiyi qədər qrup
+  yaradıla bilər — qrup sayına məhdudiyyət yoxdur
+- 30 gün bitəndə HƏMİN CİHAZ master kod daxil edilmədən yeni qrup
+  yarada/qoşula bilmir (digər cihazlara təsir etmir)
+- Master kod: **`212500032Na`** — istənilən cihazda "⚙ Ayarlar" və ya
+  demo bitəndə avtomatik çıxan ekrandan daxil edilir
+- Beləliklə eyni linki bir neçə müştəriyə verə bilərsən — hər birinin öz
+  telefonu öz demosunu alır, sən istədiyini ayrıca lisenziyalayırsan
+- ⚠️ **Dürüst xəbərdarlıq:** veb brauzerdə əsl aparat (hardware) ID-sini
+  oxumaq mümkün deyil — bu, brauzerin öz yaddaşında (localStorage) saxlanılan
+  gizli nişana əsaslanır. Texniki bilən adam brauzer məlumatlarını silərsə
+  və ya Incognito-dan davamlı istifadə etsə, yeni "cihaz" kimi tanına bilər.
+  Adi istifadəçi üçün tam etibarlıdır, 100% saxtakarlıq-sızmaz deyil.
+- Vəziyyət serverin öz yaddaşında (`data/devices.json`) saxlanılır —
   server yenidən başlasa (yatıb-oyansa) belə qalır; YALNIZ Render-də
   tam yeni "deploy" edəndə sıfırlanır
 

@@ -31,33 +31,33 @@ const MIME = {
   '.webmanifest': 'application/manifest+json',
 };
 
-// ---------- Lisenziya (HƏR QRUP KODU ÜÇÜN AYRICA) ----------
-const LICENSES_FILE = path.join(DATA_DIR, 'licenses.json');
-function loadLicenses() {
+// ---------- Lisenziya (HƏR CİHAZ/BRAUZER ÜÇÜN AYRICA) ----------
+const DEVICES_FILE = path.join(DATA_DIR, 'devices.json');
+function loadDevices() {
   try {
     if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-    if (fs.existsSync(LICENSES_FILE)) return JSON.parse(fs.readFileSync(LICENSES_FILE, 'utf8'));
+    if (fs.existsSync(DEVICES_FILE)) return JSON.parse(fs.readFileSync(DEVICES_FILE, 'utf8'));
   } catch (e) {}
   return {};
 }
-function saveLicenses(data) {
+function saveDevices(data) {
   try {
     if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-    fs.writeFileSync(LICENSES_FILE, JSON.stringify(data));
+    fs.writeFileSync(DEVICES_FILE, JSON.stringify(data));
   } catch (e) { console.error('Lisenziya faylı yazıla bilmədi:', e.message); }
 }
-let licenses = loadLicenses(); // { [groupCode]: { firstStart, licensed } }
+let devices = loadDevices(); // { [deviceId]: { firstStart, licensed } }
 
-function ensureGroupLicense(code) {
-  code = String(code || '').toLowerCase();
-  if (!licenses[code]) {
-    licenses[code] = { firstStart: Date.now(), licensed: false };
-    saveLicenses(licenses);
+function ensureDeviceLicense(deviceId) {
+  deviceId = String(deviceId || '').slice(0, 100);
+  if (!devices[deviceId]) {
+    devices[deviceId] = { firstStart: Date.now(), licensed: false };
+    saveDevices(devices);
   }
-  return licenses[code];
+  return devices[deviceId];
 }
-function groupLicenseStatus(code) {
-  const entry = ensureGroupLicense(code);
+function deviceLicenseStatus(deviceId) {
+  const entry = ensureDeviceLicense(deviceId);
   const elapsedDays = (Date.now() - entry.firstStart) / (1000 * 60 * 60 * 24);
   const daysLeft = Math.max(0, Math.ceil(DEMO_DAYS - elapsedDays));
   const demoExpired = !entry.licensed && daysLeft <= 0;
@@ -162,33 +162,33 @@ const server = http.createServer((req, res) => {
   if (reqPath === '/') reqPath = '/index.html';
 
   if (reqPath === '/api/license-status' && req.method === 'GET') {
-    const code = String(urlObj.searchParams.get('g') || '').trim();
-    if (!code) { res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ error: 'Qrup kodu lazımdır' })); return; }
+    const deviceId = String(urlObj.searchParams.get('device') || '').trim();
+    if (!deviceId) { res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ error: 'Cihaz ID lazımdır' })); return; }
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
-    res.end(JSON.stringify(groupLicenseStatus(code)));
+    res.end(JSON.stringify(deviceLicenseStatus(deviceId)));
     return;
   }
 
   if (reqPath === '/api/license' && req.method === 'POST') {
     readJsonBody(req).then((body) => {
       const masterCode = String(body.masterCode || '').trim();
-      const groupCode = String(body.groupCode || '').trim().toLowerCase();
+      const deviceId = String(body.deviceId || '').trim();
       const action = body.action === 'remove' ? 'remove' : 'activate';
       if (masterCode !== MASTER_CODE) {
         res.writeHead(403, { 'Content-Type': 'application/json; charset=utf-8' });
         res.end(JSON.stringify({ ok: false, error: 'Yanlış kod' }));
         return;
       }
-      if (!groupCode) {
+      if (!deviceId) {
         res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
-        res.end(JSON.stringify({ ok: false, error: 'Qrup kodu lazımdır' }));
+        res.end(JSON.stringify({ ok: false, error: 'Cihaz ID lazımdır' }));
         return;
       }
-      const entry = ensureGroupLicense(groupCode);
+      const entry = ensureDeviceLicense(deviceId);
       entry.licensed = action === 'activate';
-      saveLicenses(licenses);
+      saveDevices(devices);
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-      res.end(JSON.stringify({ ok: true, status: groupLicenseStatus(groupCode) }));
+      res.end(JSON.stringify({ ok: true, status: deviceLicenseStatus(deviceId) }));
     });
     return;
   }
@@ -213,10 +213,16 @@ const server = http.createServer((req, res) => {
   }
 
   if (reqPath === '/api/new-group') {
+    const deviceId = String(urlObj.searchParams.get('device') || '').trim();
+    const st = deviceLicenseStatus(deviceId);
+    if (st.blocked) {
+      res.writeHead(402, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ error: 'demo-expired' }));
+      return;
+    }
     const code = freshGroupCode();
     const adminToken = crypto.randomBytes(16).toString('hex');
     rooms.set(code.toLowerCase(), { clients: new Set(), history: [], adminTokens: new Set([adminToken]), pin: null, pushSubs: new Map() });
-    ensureGroupLicense(code); // bu qrupun öz 30 günlük demo saatı indi başlayır
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
     res.end(JSON.stringify({ code, adminToken }));
     return;
@@ -270,8 +276,8 @@ wss.on('connection', (ws) => {
       const name = String(msg.name || 'Naməlum').trim().slice(0, 30) || 'Naməlum';
       if (!channel) { ws.send(JSON.stringify({ type: 'error', text: 'Qrup kodu yoxdur' })); return; }
 
-      const st = groupLicenseStatus(channel);
-      if (st.blocked) { ws.send(JSON.stringify({ type: 'error', code: 'demo-expired', groupCode: channel, text: 'Bu qrupun demo müddəti bitib, lisenziya kodu lazımdır.' })); return; }
+      const st = deviceLicenseStatus(msg.deviceId);
+      if (st.blocked) { ws.send(JSON.stringify({ type: 'error', code: 'demo-expired', text: 'Bu cihazın demo müddəti bitib, lisenziya kodu lazımdır.' })); return; }
 
       const room = getRoom(channel);
       if (room.pin && String(msg.pin || '') !== room.pin) {
@@ -387,5 +393,5 @@ wss.on('connection', (ws) => {
 });
 
 server.listen(PORT, '0.0.0.0', () => {
-  console.log('TELSİZ server işə düşdü, port:', PORT, '| lisenziya: hər qrup öz demosunu izləyir (30 gün)');
+  console.log('TELSİZ server işə düşdü, port:', PORT, '| lisenziya: hər cihaz öz demosunu izləyir (30 gün)');
 });
