@@ -13,7 +13,6 @@ const PORT = process.env.PORT || 3000;
 const PUBLIC_DIR = __dirname;
 const DATA_DIR = path.join(__dirname, 'data');
 const HISTORY_LIMIT = 60;
-const DEMO_DAYS = 30;
 
 // ⚠️ Master/qurucu kod — bunu bilən proqramı hər yerdə lisenziyalaya
 // (və ya lisenziyanı silə) bilər. Render-in "Environment" bölməsində
@@ -31,37 +30,26 @@ const MIME = {
   '.webmanifest': 'application/manifest+json',
 };
 
-// ---------- Lisenziya (HƏR CİHAZ/BRAUZER ÜÇÜN AYRICA) ----------
-const DEVICES_FILE = path.join(DATA_DIR, 'devices.json');
-function loadDevices() {
+// ---------- Qrup kodları (YALNIZ master kodla yaradıla bilər) ----------
+const CODES_FILE = path.join(DATA_DIR, 'group-codes.json');
+function loadCodes() {
   try {
     if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-    if (fs.existsSync(DEVICES_FILE)) return JSON.parse(fs.readFileSync(DEVICES_FILE, 'utf8'));
+    if (fs.existsSync(CODES_FILE)) return JSON.parse(fs.readFileSync(CODES_FILE, 'utf8'));
   } catch (e) {}
   return {};
 }
-function saveDevices(data) {
+function saveCodes(data) {
   try {
     if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-    fs.writeFileSync(DEVICES_FILE, JSON.stringify(data));
-  } catch (e) { console.error('Lisenziya faylı yazıla bilmədi:', e.message); }
+    fs.writeFileSync(CODES_FILE, JSON.stringify(data));
+  } catch (e) { console.error('Kod faylı yazıla bilmədi:', e.message); }
 }
-let devices = loadDevices(); // { [deviceId]: { firstStart, licensed } }
+let groupCodes = loadCodes(); // { [code]: { licensed, createdAt } }
 
-function ensureDeviceLicense(deviceId) {
-  deviceId = String(deviceId || '').slice(0, 100);
-  if (!devices[deviceId]) {
-    devices[deviceId] = { firstStart: Date.now(), licensed: false };
-    saveDevices(devices);
-  }
-  return devices[deviceId];
-}
-function deviceLicenseStatus(deviceId) {
-  const entry = ensureDeviceLicense(deviceId);
-  const elapsedDays = (Date.now() - entry.firstStart) / (1000 * 60 * 60 * 24);
-  const daysLeft = Math.max(0, Math.ceil(DEMO_DAYS - elapsedDays));
-  const demoExpired = !entry.licensed && daysLeft <= 0;
-  return { licensed: !!entry.licensed, demoDaysLeft: daysLeft, demoExpired, blocked: demoExpired };
+function isCodeUsable(code) {
+  const entry = groupCodes[String(code || '').toLowerCase()];
+  return !!(entry && entry.licensed);
 }
 
 // ---------- Push bildirişləri (VAPID) ----------
@@ -161,34 +149,37 @@ const server = http.createServer((req, res) => {
   let reqPath = urlObj.pathname;
   if (reqPath === '/') reqPath = '/index.html';
 
-  if (reqPath === '/api/license-status' && req.method === 'GET') {
-    const deviceId = String(urlObj.searchParams.get('device') || '').trim();
-    if (!deviceId) { res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ error: 'Cihaz ID lazımdır' })); return; }
+  // Mövcud bir kodun lisenziya vəziyyətini yoxla (qurucu panelində istifadə üçün)
+  if (reqPath === '/api/code-status' && req.method === 'GET') {
+    const code = String(urlObj.searchParams.get('g') || '').trim().toLowerCase();
+    if (!code) { res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ error: 'Kod lazımdır' })); return; }
+    const entry = groupCodes[code];
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
-    res.end(JSON.stringify(deviceLicenseStatus(deviceId)));
+    res.end(JSON.stringify({ exists: !!entry, licensed: !!(entry && entry.licensed) }));
     return;
   }
 
+  // YALNIZ master kodla: mövcud bir kodu aktivləşdir/sil (əvvəl yaradılmış kod üçün)
   if (reqPath === '/api/license' && req.method === 'POST') {
     readJsonBody(req).then((body) => {
       const masterCode = String(body.masterCode || '').trim();
-      const deviceId = String(body.deviceId || '').trim();
+      const code = String(body.groupCode || '').trim().toLowerCase();
       const action = body.action === 'remove' ? 'remove' : 'activate';
       if (masterCode !== MASTER_CODE) {
         res.writeHead(403, { 'Content-Type': 'application/json; charset=utf-8' });
         res.end(JSON.stringify({ ok: false, error: 'Yanlış kod' }));
         return;
       }
-      if (!deviceId) {
+      if (!code) {
         res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
-        res.end(JSON.stringify({ ok: false, error: 'Cihaz ID lazımdır' }));
+        res.end(JSON.stringify({ ok: false, error: 'Qrup kodu lazımdır' }));
         return;
       }
-      const entry = ensureDeviceLicense(deviceId);
-      entry.licensed = action === 'activate';
-      saveDevices(devices);
+      if (!groupCodes[code]) groupCodes[code] = { licensed: false, createdAt: Date.now() };
+      groupCodes[code].licensed = action === 'activate';
+      saveCodes(groupCodes);
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-      res.end(JSON.stringify({ ok: true, status: deviceLicenseStatus(deviceId) }));
+      res.end(JSON.stringify({ ok: true, licensed: groupCodes[code].licensed }));
     });
     return;
   }
@@ -212,19 +203,23 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  if (reqPath === '/api/new-group') {
-    const deviceId = String(urlObj.searchParams.get('device') || '').trim();
-    const st = deviceLicenseStatus(deviceId);
-    if (st.blocked) {
-      res.writeHead(402, { 'Content-Type': 'application/json; charset=utf-8' });
-      res.end(JSON.stringify({ error: 'demo-expired' }));
-      return;
-    }
-    const code = freshGroupCode();
-    const adminToken = crypto.randomBytes(16).toString('hex');
-    rooms.set(code.toLowerCase(), { clients: new Set(), history: [], adminTokens: new Set([adminToken]), pin: null, pushSubs: new Map() });
-    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
-    res.end(JSON.stringify({ code, adminToken }));
+  // YALNIZ master kodla: tamamilə yeni kod yarat (bunu yalnız qurucu edə bilər)
+  if (reqPath === '/api/founder/new-code' && req.method === 'POST') {
+    readJsonBody(req).then((body) => {
+      const masterCode = String(body.masterCode || '').trim();
+      if (masterCode !== MASTER_CODE) {
+        res.writeHead(403, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ ok: false, error: 'Yanlış kod' }));
+        return;
+      }
+      const code = freshGroupCode();
+      const adminToken = crypto.randomBytes(16).toString('hex');
+      rooms.set(code.toLowerCase(), { clients: new Set(), history: [], adminTokens: new Set([adminToken]), pin: null, pushSubs: new Map() });
+      groupCodes[code.toLowerCase()] = { licensed: true, createdAt: Date.now() };
+      saveCodes(groupCodes);
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+      res.end(JSON.stringify({ ok: true, code, adminToken }));
+    });
     return;
   }
 
@@ -276,8 +271,7 @@ wss.on('connection', (ws) => {
       const name = String(msg.name || 'Naməlum').trim().slice(0, 30) || 'Naməlum';
       if (!channel) { ws.send(JSON.stringify({ type: 'error', text: 'Qrup kodu yoxdur' })); return; }
 
-      const st = deviceLicenseStatus(msg.deviceId);
-      if (st.blocked) { ws.send(JSON.stringify({ type: 'error', code: 'demo-expired', text: 'Bu cihazın demo müddəti bitib, lisenziya kodu lazımdır.' })); return; }
+      if (!isCodeUsable(channel)) { ws.send(JSON.stringify({ type: 'error', code: 'invalid-code', text: 'Bu kod tapılmadı və ya aktiv deyil.' })); return; }
 
       const room = getRoom(channel);
       if (room.pin && String(msg.pin || '') !== room.pin) {
@@ -393,5 +387,5 @@ wss.on('connection', (ws) => {
 });
 
 server.listen(PORT, '0.0.0.0', () => {
-  console.log('TELSİZ server işə düşdü, port:', PORT, '| lisenziya: hər cihaz öz demosunu izləyir (30 gün)');
+  console.log('TELSİZ server işə düşdü, port:', PORT, '| kodlar yalnız master kodla yaradıla bilər');
 });

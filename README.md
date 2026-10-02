@@ -6,25 +6,22 @@ dünyanın istənilən yerindən yazışa, danışa (sıx-danış səs mesajı i
 
 ---
 
-## Lisenziya sistemi (HƏR CİHAZ ÜÇÜN AYRICA)
+## Lisenziya sistemi (YALNIZ SƏN YENİ KOD YARADA BİLƏRSƏN)
 
-- Hər telefon/brauzer ilk dəfə sayta girdiyi andan öz **30 günlük demosunu**
-  başladır (brauzerin öz yaddaşında gizli nişanla tanınır) — fərqli cihazlar
-  bir-birindən tam asılı deyil
-- Bir cihaz lisenziyalı olduqdan sonra həmin cihazdan istədiyi qədər qrup
-  yaradıla bilər — qrup sayına məhdudiyyət yoxdur
-- 30 gün bitəndə HƏMİN CİHAZ master kod daxil edilmədən yeni qrup
-  yarada/qoşula bilmir (digər cihazlara təsir etmir)
-- Master kod: **`212500032Na`** — istənilən cihazda "⚙ Ayarlar" və ya
-  demo bitəndə avtomatik çıxan ekrandan daxil edilir
-- Beləliklə eyni linki bir neçə müştəriyə verə bilərsən — hər birinin öz
-  telefonu öz demosunu alır, sən istədiyini ayrıca lisenziyalayırsan
-- ⚠️ **Dürüst xəbərdarlıq:** veb brauzerdə əsl aparat (hardware) ID-sini
-  oxumaq mümkün deyil — bu, brauzerin öz yaddaşında (localStorage) saxlanılan
-  gizli nişana əsaslanır. Texniki bilən adam brauzer məlumatlarını silərsə
-  və ya Incognito-dan davamlı istifadə etsə, yeni "cihaz" kimi tanına bilər.
-  Adi istifadəçi üçün tam etibarlıdır, 100% saxtakarlıq-sızmaz deyil.
-- Vəziyyət serverin öz yaddaşında (`data/devices.json`) saxlanılır —
+- Müştərilər "Yeni qrup yarat" düyməsi GÖRMÜR — onlar yalnız sənin
+  verdiyin kodla "Qrup koduna qoşul" edə bilir
+- Yeni kod yalnız **sən** yarada bilərsən: linki aç → "⚙ Ayarlar" →
+  Master kodu yaz → **"YENİ KOD YARAT"** bas → çıxan kodu/linki/QR-ı
+  müştəriyə göndər (WhatsApp, SMS, fərq etməz)
+- Naməlum/uydurma kod ilə heç kim qoşula bilməz — server onu rədd edir
+- Master kod: **`212500032Na`**
+- Mövcud bir kodu sonradan söndürmək (məs. müştəri ödəməyi dayandırsa)
+  istəsən: "⚙ Ayarlar"da "Mövcud qrup kodu" sahəsinə həmin kodu yaz,
+  Master kodu yaz, **"SİL"** bas — o kod artıq işləməyəcək. Yenidən
+  aktivləşdirmək üçün eyni yerdən **"AKTİVLƏŞDİR"**
+- Bir kod aktivdirsə, ona istədiyi qədər adam qoşula bilər (kod daxilində
+  sayı məhdudlaşdırmır) — hər kodu ayrıca "məhsul" kimi düşün
+- Vəziyyət serverin öz yaddaşında (`data/group-codes.json`) saxlanılır —
   server yenidən başlasa (yatıb-oyansa) belə qalır; YALNIZ Render-də
   tam yeni "deploy" edəndə sıfırlanır
 
