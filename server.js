@@ -222,13 +222,15 @@ const server = http.createServer((req, res) => {
         res.end(JSON.stringify({ ok: false, error: 'Yanlış kod' }));
         return;
       }
+      let maxMembers = parseInt(body.maxMembers, 10);
+      if (!Number.isFinite(maxMembers) || maxMembers <= 0) maxMembers = null;
       const code = freshGroupCode();
       const adminToken = crypto.randomBytes(16).toString('hex');
       rooms.set(code.toLowerCase(), { clients: new Set(), history: [], adminTokens: new Set([adminToken]), pin: null, pushSubs: new Map() });
-      groupCodes[code.toLowerCase()] = { licensed: true, createdAt: Date.now() };
+      groupCodes[code.toLowerCase()] = { licensed: true, createdAt: Date.now(), maxMembers: maxMembers };
       saveCodes(groupCodes);
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
-      res.end(JSON.stringify({ ok: true, code, adminToken }));
+      res.end(JSON.stringify({ ok: true, code, adminToken, maxMembers: maxMembers }));
     });
     return;
   }
@@ -284,6 +286,11 @@ wss.on('connection', (ws) => {
       if (!isCodeUsable(channel)) { ws.send(JSON.stringify({ type: 'error', code: 'invalid-code', text: 'Bu kod tapılmadı və ya aktiv deyil.' })); return; }
 
       const room = getRoom(channel);
+      const maxM = groupCodes[channel] && groupCodes[channel].maxMembers;
+      if (maxM && room.clients.size >= maxM) {
+        ws.send(JSON.stringify({ type: 'error', code: 'room-full', text: `Otaq doludur (maksimum ${maxM} nəfər).` }));
+        return;
+      }
       if (room.pin && String(msg.pin || '') !== room.pin) {
         ws.send(JSON.stringify({ type: 'error', code: 'wrong-pin', text: 'PIN kodu səhvdir.' }));
         return;

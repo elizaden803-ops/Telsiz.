@@ -13,6 +13,8 @@ dünyanın istənilən yerindən yazışa, danışa (sıx-danış səs mesajı i
 - **Qurucu panelinə giriş gizlidir:** "Ad" sahəsinə öz adının əvəzinə
   Master kodu (`212500032Na`) yazıb "QRUPA QOŞUL" bassan, panel açılır —
   ora "YENİ KOD YARAT" və mövcud kodu aktivləşdir/sil düymələri var
+- Yeni kod yaradanda istəsən **maksimum nəfər sayı** da təyin edə bilərsən (boş
+  buraxsan limitsiz) — limit dolanda yeni adam qoşula bilmir
 - Yeni kod yaratdıqda kod/link/QR çıxır — onu müştəriyə göndərirsən
   (WhatsApp, SMS, fərq etməz)
 - Naməlum/uydurma kod ilə heç kim qoşula bilməz — server onu rədd edir

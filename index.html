@@ -70,14 +70,12 @@
   header .ch.online .dot{ background:var(--accent-live); box-shadow:0 0 6px var(--accent-live); }
   header .ch.offline .dot{ background:var(--danger); }
   header .meta{
-    display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text-muted);
-    overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none; padding-bottom:2px;
+    display:flex; align-items:center; justify-content:flex-end; gap:6px; color:var(--text-muted);
   }
-  header .meta::-webkit-scrollbar{ display:none; }
   header .meta button{
     background:none; border:1px solid var(--line); color:var(--text-muted);
-    padding:6px 10px; border-radius:4px; font-size:12px; font-family:var(--mono);
-    flex-shrink:0; white-space:nowrap;
+    width:34px; height:34px; border-radius:6px; font-size:15px;
+    flex-shrink:0; display:flex; align-items:center; justify-content:center; padding:0;
   }
 
   #presence{ display:none; background:var(--bg-panel); border-bottom:1px solid var(--line); padding:10px 16px; font-size:13px; color:var(--text-muted); flex-shrink:0; }
@@ -155,6 +153,10 @@
       <label for="settingsCodeInput">Master kod</label>
       <input id="settingsCodeInput" type="text" autocomplete="off">
     </div>
+    <div class="field">
+      <label for="maxMembersInput">Maksimum nəfər (boş = limitsiz)</label>
+      <input id="maxMembersInput" type="number" inputmode="numeric" min="1" placeholder="Məs: 10">
+    </div>
     <button class="btn" id="createCodeBtn">YENİ KOD YARAT</button>
     <div class="err" id="createCodeErr"></div>
 
@@ -194,11 +196,11 @@
         <span id="onlineCount" style="font-size:12px; color:var(--text-muted); font-family:var(--mono);">0 nəfər</span>
       </div>
       <div class="meta">
-        <button id="inviteBtn">DƏVƏT</button>
-        <button id="presenceBtn">SİYAHI</button>
+        <button id="inviteBtn" title="Dəvət">📨</button>
+        <button id="presenceBtn" title="Siyahı">👥</button>
         <button id="notifyBtn" title="Bildirişlər">🔔</button>
-        <button id="sosBtn" style="color:#fff; background:var(--danger); border-color:var(--danger); font-weight:700;">SOS</button>
-        <button id="leaveBtn" style="color:var(--danger); border-color:var(--danger);">ÇIX</button>
+        <button id="sosBtn" title="SOS" style="color:#fff; background:var(--danger); border-color:var(--danger); font-weight:700;">🚨</button>
+        <button id="leaveBtn" title="Çıx" style="color:var(--danger); border-color:var(--danger);">✕</button>
       </div>
     </header>
     <div id="presence"></div>
@@ -312,9 +314,10 @@
 
   els.createCodeBtn.addEventListener('click', function(){
     var masterCode = els.settingsCodeInput.value.trim();
+    var maxMembers = document.getElementById('maxMembersInput').value.trim();
     if (!masterCode){ els.createCodeErr.textContent = 'Master kodu yaz.'; return; }
     els.createCodeBtn.disabled = true;
-    fetch('/api/founder/new-code', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ masterCode: masterCode }) })
+    fetch('/api/founder/new-code', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ masterCode: masterCode, maxMembers: maxMembers }) })
       .then(function(r){ return r.json(); }).then(function(d){
         els.createCodeBtn.disabled = false;
         if (d.ok){
@@ -358,6 +361,7 @@
           els.chooseErr.textContent = '';
           els.settingsGroupCode.value = '';
           els.settingsCodeInput.value = '';
+          document.getElementById('maxMembersInput').value = '';
           els.settingsStatus.textContent = '';
           els.settingsErr.textContent = '';
           els.createCodeErr.textContent = '';
@@ -400,9 +404,8 @@
     state.channel = channelLower;
     state.adminToken = adminToken || null;
     state.pendingPin = pin || '';
-    els.chText.textContent = displayCode;
-    ALL_SCREENS.forEach(function(s){ document.getElementById(s).style.display = 'none'; });
-    els.main.style.display = 'flex';
+    state.pendingDisplayCode = displayCode;
+    els.nameNextBtn.disabled = true;
     connect();
   }
 
@@ -561,6 +564,10 @@
       if (m.type === 'history'){
         state.myId = m.youId;
         state.isAdmin = !!m.isAdmin;
+        els.nameNextBtn.disabled = false;
+        els.chText.textContent = state.pendingDisplayCode || state.channel.toUpperCase();
+        ALL_SCREENS.forEach(function(s){ document.getElementById(s).style.display = 'none'; });
+        els.main.style.display = 'flex';
         els.feed.innerHTML = '';
         m.messages.forEach(function(x){
           if (x.type === 'chat') addChat(x); else if (x.type === 'photo') addPhoto(x); else if (x.type === 'voice') addVoice(x);
@@ -604,10 +611,11 @@
         d.appendChild(b); els.feed.appendChild(d); scrollFeed();
       }
       else if (m.type === 'error'){
-        if (m.code === 'wrong-pin' || m.code === 'invalid-code'){
+        if (m.code === 'wrong-pin' || m.code === 'invalid-code' || m.code === 'room-full'){
           ws.onclose = null; ws.close(); els.main.style.display='none';
+          els.nameNextBtn.disabled = false;
           els.chooseErr.textContent = m.text;
-          showScreen('screenChoose');
+          showScreen('screenName');
         }
         else { addSystem(m.text); }
       }
@@ -753,7 +761,9 @@
     els.presence.classList.remove('open');
     history.replaceState(null, '', location.pathname);
     els.main.style.display = 'none';
-    showScreen('screenChoose');
+    els.codeInput.value = '';
+    els.chooseErr.textContent = '';
+    showScreen('screenName');
   });
 
   if ('serviceWorker' in navigator){
