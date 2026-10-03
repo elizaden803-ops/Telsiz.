@@ -149,6 +149,16 @@ const server = http.createServer((req, res) => {
   let reqPath = urlObj.pathname;
   if (reqPath === '/') reqPath = '/index.html';
 
+  // Ad sahəsinə yazılan mətnin master kod olub-olmadığını yoxla (dəyəri geri qaytarmır, yalnız bəli/xeyr)
+  if (reqPath === '/api/check-master' && req.method === 'POST') {
+    readJsonBody(req).then((body) => {
+      const value = String(body.value || '').trim();
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+      res.end(JSON.stringify({ isMaster: value === MASTER_CODE }));
+    });
+    return;
+  }
+
   // Mövcud bir kodun lisenziya vəziyyətini yoxla (qurucu panelində istifadə üçün)
   if (reqPath === '/api/code-status' && req.method === 'GET') {
     const code = String(urlObj.searchParams.get('g') || '').trim().toLowerCase();

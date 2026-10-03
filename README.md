@@ -8,19 +8,18 @@ dünyanın istənilən yerindən yazışa, danışa (sıx-danış səs mesajı i
 
 ## Lisenziya sistemi (YALNIZ SƏN YENİ KOD YARADA BİLƏRSƏN)
 
-- Müştərilər "Yeni qrup yarat" düyməsi GÖRMÜR — onlar yalnız sənin
-  verdiyin kodla "Qrup koduna qoşul" edə bilir
-- Yeni kod yalnız **sən** yarada bilərsən: linki aç → "⚙ Ayarlar" →
-  Master kodu yaz → **"YENİ KOD YARAT"** bas → çıxan kodu/linki/QR-ı
-  müştəriyə göndər (WhatsApp, SMS, fərq etməz)
+- Giriş ekranı sadədir: **Ad** + **Qrup kodu** + "QRUPA QOŞUL" — müştəri
+  başqa heç nə görmür
+- **Qurucu panelinə giriş gizlidir:** "Ad" sahəsinə öz adının əvəzinə
+  Master kodu (`212500032Na`) yazıb "QRUPA QOŞUL" bassan, panel açılır —
+  ora "YENİ KOD YARAT" və mövcud kodu aktivləşdir/sil düymələri var
+- Yeni kod yaratdıqda kod/link/QR çıxır — onu müştəriyə göndərirsən
+  (WhatsApp, SMS, fərq etməz)
 - Naməlum/uydurma kod ilə heç kim qoşula bilməz — server onu rədd edir
-- Master kod: **`212500032Na`**
 - Mövcud bir kodu sonradan söndürmək (məs. müştəri ödəməyi dayandırsa)
-  istəsən: "⚙ Ayarlar"da "Mövcud qrup kodu" sahəsinə həmin kodu yaz,
-  Master kodu yaz, **"SİL"** bas — o kod artıq işləməyəcək. Yenidən
-  aktivləşdirmək üçün eyni yerdən **"AKTİVLƏŞDİR"**
-- Bir kod aktivdirsə, ona istədiyi qədər adam qoşula bilər (kod daxilində
-  sayı məhdudlaşdırmır) — hər kodu ayrıca "məhsul" kimi düşün
+  istəsən: panelə gir, "Mövcud qrup kodu" sahəsinə həmin kodu yaz, Master
+  kodu yaz, **"SİL"** bas. Yenidən açmaq üçün eyni yerdən **"AKTİVLƏŞDİR"**
+- Bir kod aktivdirsə, ona istədiyi qədər adam qoşula bilər
 - Vəziyyət serverin öz yaddaşında (`data/group-codes.json`) saxlanılır —
   server yenidən başlasa (yatıb-oyansa) belə qalır; YALNIZ Render-də
   tam yeni "deploy" edəndə sıfırlanır

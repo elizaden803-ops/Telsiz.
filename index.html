@@ -131,14 +131,20 @@
 
   <div class="screen" id="screenName">
     <div class="brand">TELSİZ</div>
-    <h1 id="nameHeading">Başlamaq üçün adını yaz</h1>
-    <p class="sub" id="nameSub">Dünyanın istənilən yerindən komandanla yazışa, danışa, şəkil ata bilərsən.</p>
+    <h1 id="nameHeading">Qrupa qoşul</h1>
+    <p class="sub" id="nameSub">Adını və sənə verilən qrup kodunu yaz.</p>
     <div class="field">
       <label for="nameInput">Adın</label>
       <input id="nameInput" type="text" maxlength="30" placeholder="Məs: Nurlan" autocomplete="off">
     </div>
-    <button class="btn" id="nameNextBtn">DAVAM ET</button>
-    <a href="#" id="gearLink" class="btn ghost" style="align-self:center;">⚙ Ayarlar / Lisenziya</a>
+    <div class="field">
+      <label for="codeInput">Qrup kodu</label>
+      <input id="codeInput" class="code" type="text" maxlength="8" placeholder="ABC123" autocomplete="off">
+      <label for="joinPinInput" style="margin-top:8px;">PIN (əgər qoyulubsa)</label>
+      <input id="joinPinInput" class="code" type="text" maxlength="8" placeholder="——" autocomplete="off">
+    </div>
+    <button class="btn" id="nameNextBtn">QRUPA QOŞUL</button>
+    <div class="err" id="chooseErr"></div>
   </div>
 
   <div class="screen" id="screenSettings" style="display:none;">
@@ -166,20 +172,6 @@
     </div>
 
     <button class="btn ghost" id="settingsBackBtn" style="align-self:center;">← Geri</button>
-  </div>
-
-  <div class="screen" id="screenChoose" style="display:none;">
-    <div class="brand">TELSİZ</div>
-    <h1>Qrup koduna qoşul</h1>
-    <p class="sub">Sənə verilən kodu daxil et.</p>
-    <div class="field">
-      <label for="codeInput">Qrup kodu</label>
-      <input id="codeInput" class="code" type="text" maxlength="8" placeholder="ABC123" autocomplete="off">
-      <label for="joinPinInput" style="margin-top:8px;">PIN (əgər qoyulubsa)</label>
-      <input id="joinPinInput" class="code" type="text" maxlength="8" placeholder="——" autocomplete="off">
-      <button class="btn" id="joinCodeBtn" style="margin-top:10px;">QOŞUL</button>
-    </div>
-    <div class="err" id="chooseErr"></div>
   </div>
 
   <div class="screen" id="screenInvite" style="display:none;">
@@ -255,7 +247,6 @@
     nameInput: document.getElementById('nameInput'),
     nameNextBtn: document.getElementById('nameNextBtn'),
     codeInput: document.getElementById('codeInput'),
-    joinCodeBtn: document.getElementById('joinCodeBtn'),
     chooseErr: document.getElementById('chooseErr'),
     inviteCode: document.getElementById('inviteCode'),
     inviteQr: document.getElementById('inviteQr'),
@@ -286,7 +277,6 @@
     ovPinField: document.getElementById('ovPinField'),
     ovPinInput: document.getElementById('ovPinInput'),
     ovPinSetBtn: document.getElementById('ovPinSetBtn'),
-    gearLink: document.getElementById('gearLink'),
     screenSettings: document.getElementById('screenSettings'),
     settingsStatus: document.getElementById('settingsStatus'),
     settingsCodeInput: document.getElementById('settingsCodeInput'),
@@ -300,15 +290,14 @@
     joinPinInput: document.getElementById('joinPinInput'),
   };
 
-  var ALL_SCREENS = ['screenName','screenChoose','screenInvite','screenSettings'];
+  var ALL_SCREENS = ['screenName','screenInvite','screenSettings'];
   var state = { ws:null, name:'', channel:'', myId:null, isAdmin:false, adminToken:null, recording:false, mediaRecorder:null, chunks:[], recStart:0, connected:false, audioCtx:null };
   var params = new URLSearchParams(location.search);
   var incomingCode = (params.get('g') || '').trim().toUpperCase();
 
   els.nameInput.value = localStorage.getItem('telsiz_name') || '';
   if (incomingCode) {
-    els.nameHeading.textContent = 'Qrupa qoşulursan';
-    els.nameSub.textContent = 'Kod: ' + incomingCode + ' — davam etmək üçün adını yaz.';
+    els.codeInput.value = incomingCode;
   }
 
   function showScreen(id){
@@ -319,15 +308,6 @@
 
   showScreen('screenName');
 
-  // ---- Qurucu paneli (Ayarlar) — yalnız master kodu bilən istifadə edə bilər ----
-  els.gearLink.addEventListener('click', function(e){
-    e.preventDefault();
-    els.settingsGroupCode.value = '';
-    els.settingsStatus.textContent = '';
-    els.settingsErr.textContent = '';
-    els.createCodeErr.textContent = '';
-    showScreen('screenSettings');
-  });
   els.settingsBackBtn.addEventListener('click', function(){ showScreen('screenName'); });
 
   els.createCodeBtn.addEventListener('click', function(){
@@ -367,26 +347,35 @@
   els.nameNextBtn.addEventListener('click', function(){
     ensureAudio();
     var name = els.nameInput.value.trim();
-    if (!name){ els.nameInput.focus(); return; }
-    localStorage.setItem('telsiz_name', name);
-    state.name = name;
-    if (incomingCode){
-      var savedToken = localStorage.getItem('telsiz_admin_' + incomingCode);
-      joinChannel(incomingCode.toLowerCase(), incomingCode, savedToken, '');
-    } else {
-      showScreen('screenChoose');
-    }
+    if (!name){ els.chooseErr.textContent = 'Adını yaz.'; els.nameInput.focus(); return; }
+
+    els.nameNextBtn.disabled = true;
+    fetch('/api/check-master', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ value: name }) })
+      .then(function(r){ return r.json(); }).then(function(d){
+        els.nameNextBtn.disabled = false;
+        if (d.isMaster){
+          els.nameInput.value = '';
+          els.chooseErr.textContent = '';
+          els.settingsGroupCode.value = '';
+          els.settingsCodeInput.value = '';
+          els.settingsStatus.textContent = '';
+          els.settingsErr.textContent = '';
+          els.createCodeErr.textContent = '';
+          showScreen('screenSettings');
+          return;
+        }
+        var code = els.codeInput.value.trim().toUpperCase();
+        var pin = els.joinPinInput.value.trim();
+        if (!code){ els.chooseErr.textContent = 'Qrup kodunu yaz.'; els.codeInput.focus(); return; }
+        els.chooseErr.textContent = '';
+        localStorage.setItem('telsiz_name', name);
+        state.name = name;
+        var savedToken = localStorage.getItem('telsiz_admin_' + code);
+        joinChannel(code.toLowerCase(), code, savedToken, pin);
+      }).catch(function(){ els.nameNextBtn.disabled = false; els.chooseErr.textContent = 'Şəbəkə xətası.'; });
   });
   els.nameInput.addEventListener('keydown', function(e){ if (e.key === 'Enter') els.nameNextBtn.click(); });
-
-  els.joinCodeBtn.addEventListener('click', function(){
-    var code = els.codeInput.value.trim().toUpperCase();
-    var pin = els.joinPinInput.value.trim();
-    if (!code){ els.codeInput.focus(); return; }
-    var savedToken = localStorage.getItem('telsiz_admin_' + code);
-    joinChannel(code.toLowerCase(), code, savedToken, pin);
-  });
-  els.codeInput.addEventListener('keydown', function(e){ if (e.key === 'Enter') els.joinCodeBtn.click(); });
+  els.codeInput.addEventListener('keydown', function(e){ if (e.key === 'Enter') els.nameNextBtn.click(); });
 
   function setupInviteScreen(code){
     els.inviteCode.textContent = code;
@@ -563,7 +552,7 @@
     state.ws = ws;
     ws.onopen = function(){
       setConnected(true);
-      ws.send(JSON.stringify({ type:'join', name: state.name, channel: state.channel, adminToken: state.adminToken, pin: state.pendingPin || '', deviceId: DEVICE_ID }));
+      ws.send(JSON.stringify({ type:'join', name: state.name, channel: state.channel, adminToken: state.adminToken, pin: state.pendingPin || '' }));
     };
     ws.onclose = function(){ setConnected(false); setTimeout(function(){ if (state.name && state.channel) connect(); }, 1500); };
     ws.onerror = function(){};
