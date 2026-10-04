@@ -49,6 +49,14 @@ kodu itirməsə admin statusu qalır). Admin:
   öz brauzer tabında YOX)
 - **SOS düyməsi:** basanda təsdiq istəyir, sonra bütün qrupa yüksək səsli
   alarm + (icazə versən) sənin məkanını (xəritə linki) göndərir
+- **Anlıq (canlı) səs yayımı:** PTT düyməsinin altındakı "🔴 Anlıq yayım"
+  düyməsi ilə aç/bağla. AÇIQ olanda SIX VƏ DANIŞ-a basıb danışdığın an
+  (təxminən yarım saniyə gecikmə ilə) qrupdakı hamı canlı eşidir — BUNUNLA
+  YANAŞI, danışıb bitirəndə tam qeyd kimi söhbət tarixçəsində də qalır
+  (ikisi də olur, biri digərini əvəz etmir). BAĞLI olanda əvvəlki kimi
+  işləyir: bas-danış-burax, sonra ötürülür.
+  ⚠️ Köhnə telefon/brauzerlərdə canlı yayım dəstəklənməyə bilər — belə
+  halda sadəcə son qeyd (burax-sonra-ötür) kimi işləyir, heç nə pozulmur.
 - **Kamera:** 📷 düyməsi telefonun kamerasını birbaşa açır (qalereya yox)
 - **Səs keyfiyyəti:** əks-səda təmizlənməsi və arxa fon küyü filtri aktivdir,
   zəif internetdə də (aşağı bit-rate) kəsintisiz işləməyə çalışır

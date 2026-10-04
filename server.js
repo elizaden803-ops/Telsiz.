@@ -333,6 +333,20 @@ wss.on('connection', (ws) => {
     if (msg.type === 'ptt-start') { broadcast(ws.channel, { type: 'ptt-start', id: ws.id, name: ws.name }, ws); return; }
     if (msg.type === 'ptt-stop') { broadcast(ws.channel, { type: 'ptt-stop', id: ws.id, name: ws.name }, ws); return; }
 
+    // ---- Anlıq (canlı) səs ötürmə: sadəcə relay, saxlanmır ----
+    if (msg.type === 'live-start') {
+      broadcast(ws.channel, { type: 'live-start', streamId: msg.streamId, id: ws.id, name: ws.name, mimeType: msg.mimeType }, ws);
+      return;
+    }
+    if (msg.type === 'live-chunk') {
+      broadcast(ws.channel, { type: 'live-chunk', streamId: msg.streamId, id: ws.id, seq: msg.seq, data: msg.data }, ws);
+      return;
+    }
+    if (msg.type === 'live-end') {
+      broadcast(ws.channel, { type: 'live-end', streamId: msg.streamId, id: ws.id }, ws);
+      return;
+    }
+
     if (msg.type === 'sos') {
       const lat = typeof msg.lat === 'number' ? msg.lat : null;
       const lng = typeof msg.lng === 'number' ? msg.lng : null;

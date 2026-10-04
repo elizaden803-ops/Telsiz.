@@ -214,6 +214,9 @@
     <div id="ptt-wrap">
       <button id="ptt">SIX VƏ DANIŞ</button>
       <div id="ptt-status"></div>
+      <button id="liveToggle" style="margin-top:8px; width:100%; padding:8px; border-radius:6px; border:1px solid var(--line); background:var(--bg-elevated); color:var(--text-muted); font-size:12px; font-family:var(--mono);">
+        🔴 Anlıq yayım: BAĞLI
+      </button>
     </div>
   </div>
 
@@ -515,6 +518,65 @@
     if (navigator.vibrate) navigator.vibrate(120);
   }
 
+  // ---- Anlıq (canlı) səs qəbulu — MediaSource ilə demək olar ki, dərhal oxutma ----
+  state.liveStreams = {};
+  function startLiveReceive(streamId, name, mimeType){
+    if (!window.MediaSource) return; // bu brauzerdə dəstəklənmir, sakit keç
+    var mime = mimeType || 'audio/webm;codecs=opus';
+    try {
+      if (!MediaSource.isTypeSupported(mime)) {
+        if (MediaSource.isTypeSupported('audio/webm;codecs=opus')) mime = 'audio/webm;codecs=opus';
+        else return;
+      }
+    } catch(e){ return; }
+    var ms = new MediaSource();
+    var audioEl = new Audio();
+    audioEl.src = URL.createObjectURL(ms);
+    var entry = { mediaSource: ms, sourceBuffer: null, audioEl: audioEl, pending: [], ended: false };
+    state.liveStreams[streamId] = entry;
+    ms.addEventListener('sourceopen', function(){
+      try {
+        var sb = ms.addSourceBuffer(mime);
+        entry.sourceBuffer = sb;
+        sb.addEventListener('updateend', function(){ pumpLiveQueue(streamId); });
+        pumpLiveQueue(streamId);
+      } catch(e){}
+    });
+    audioEl.play().catch(function(){});
+    els.pttStatus.textContent = name + ' canlı yayımdadır...';
+    els.pttStatus.className = 'live';
+  }
+  function feedLiveChunk(streamId, dataUrl){
+    var entry = state.liveStreams[streamId];
+    if (!entry || !dataUrl) return;
+    try {
+      var base64 = dataUrl.split(',')[1];
+      var bin = atob(base64);
+      var bytes = new Uint8Array(bin.length);
+      for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      entry.pending.push(bytes.buffer);
+      pumpLiveQueue(streamId);
+    } catch(e){}
+  }
+  function pumpLiveQueue(streamId){
+    var entry = state.liveStreams[streamId];
+    if (!entry || !entry.sourceBuffer || entry.sourceBuffer.updating) return;
+    if (entry.pending.length === 0){
+      if (entry.ended){ try { entry.mediaSource.endOfStream(); } catch(e){} }
+      return;
+    }
+    var next = entry.pending.shift();
+    try { entry.sourceBuffer.appendBuffer(next); } catch(e){}
+  }
+  function endLiveReceive(streamId){
+    var entry = state.liveStreams[streamId];
+    if (!entry) return;
+    entry.ended = true;
+    pumpLiveQueue(streamId);
+    els.pttStatus.textContent = ''; els.pttStatus.className = '';
+    setTimeout(function(){ delete state.liveStreams[streamId]; }, 4000);
+  }
+
   function setConnected(ok){ state.connected = ok; els.chLabel.className = 'ch ' + (ok ? 'online' : 'offline'); }
   function updatePresence(users){
     els.onlineCount.textContent = users.length + ' nəfər';
@@ -579,6 +641,9 @@
       else if (m.type === 'system'){ addSystem(m.text); }
       else if (m.type === 'ptt-start'){ els.pttStatus.textContent = m.name + ' danışır...'; els.pttStatus.className = 'live'; }
       else if (m.type === 'ptt-stop'){ if (els.pttStatus.textContent.indexOf(m.name) === 0){ els.pttStatus.textContent = ''; els.pttStatus.className = ''; } }
+      else if (m.type === 'live-start'){ startLiveReceive(m.streamId, m.name, m.mimeType); }
+      else if (m.type === 'live-chunk'){ feedLiveChunk(m.streamId, m.data); }
+      else if (m.type === 'live-end'){ endLiveReceive(m.streamId); }
       else if (m.type === 'kicked'){
         ws.onclose = null;
         alert('Admin (' + m.by + ') səni qrupdan çıxardı.');
@@ -651,21 +716,51 @@
     els.photoInput.value = '';
   });
 
+  // ---- Anlıq (canlı) yayım aç/bağla ----
+  state.liveMode = false;
+  var liveToggleBtn = document.getElementById('liveToggle');
+  liveToggleBtn.addEventListener('click', function(){
+    state.liveMode = !state.liveMode;
+    liveToggleBtn.textContent = '🔴 Anlıq yayım: ' + (state.liveMode ? 'AÇIQ (hamı canlı eşidir)' : 'BAĞLI');
+    liveToggleBtn.style.color = state.liveMode ? 'var(--accent-live)' : 'var(--text-muted)';
+    liveToggleBtn.style.borderColor = state.liveMode ? 'var(--accent-live)' : 'var(--line)';
+  });
+
   function startRec(){
     if (state.recording) return;
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){ els.pttStatus.textContent = 'Mikrofon dəstəklənmir'; return; }
     navigator.mediaDevices.getUserMedia({ audio: { echoCancellation:true, noiseSuppression:true, autoGainControl:true, channelCount:1 } }).then(function(stream){
       state.recording = true; state.recStart = Date.now();
-      els.ptt.classList.add('live'); els.pttStatus.textContent = 'DANIŞIRSAN...'; els.pttStatus.className = 'live';
+      els.ptt.classList.add('live');
+      els.pttStatus.textContent = state.liveMode ? 'CANLI YAYIMDASAN...' : 'DANIŞIRSAN...';
+      els.pttStatus.className = 'live';
       if (state.ws && state.ws.readyState === 1) state.ws.send(JSON.stringify({ type:'ptt-start' }));
       var mimeType = 'audio/webm;codecs=opus';
       if (!window.MediaRecorder || !MediaRecorder.isTypeSupported || !MediaRecorder.isTypeSupported(mimeType)) mimeType = '';
       var mr = mimeType ? new MediaRecorder(stream, { mimeType: mimeType, audioBitsPerSecond: 24000 }) : new MediaRecorder(stream, { audioBitsPerSecond: 24000 });
       state.mediaRecorder = mr; state.chunks = [];
-      mr.ondataavailable = function(e){ if (e.data && e.data.size > 0) state.chunks.push(e.data); };
+      var liveStreamId = state.liveMode ? ('s' + Date.now() + Math.random().toString(36).slice(2,6)) : null;
+      var liveSeq = 0;
+      if (liveStreamId && state.ws && state.ws.readyState === 1){
+        state.ws.send(JSON.stringify({ type:'live-start', streamId: liveStreamId, mimeType: mr.mimeType || 'audio/webm' }));
+      }
+      mr.ondataavailable = function(e){
+        if (!e.data || e.data.size === 0) return;
+        state.chunks.push(e.data);
+        if (liveStreamId && state.ws && state.ws.readyState === 1){
+          var r = new FileReader();
+          r.onload = function(ev){
+            state.ws.send(JSON.stringify({ type:'live-chunk', streamId: liveStreamId, seq: liveSeq++, data: ev.target.result }));
+          };
+          r.readAsDataURL(e.data);
+        }
+      };
       mr.onstop = function(){
         stream.getTracks().forEach(function(t){ t.stop(); });
         var duration = Date.now() - state.recStart;
+        if (liveStreamId && state.ws && state.ws.readyState === 1){
+          state.ws.send(JSON.stringify({ type:'live-end', streamId: liveStreamId }));
+        }
         if (duration < 300){ els.pttStatus.textContent=''; els.pttStatus.className=''; return; }
         var blob = new Blob(state.chunks, { type: mr.mimeType || 'audio/webm' });
         var reader = new FileReader();
@@ -678,7 +773,7 @@
         };
         reader.readAsDataURL(blob);
       };
-      mr.start();
+      mr.start(liveStreamId ? 250 : undefined);
     }).catch(function(){ els.pttStatus.textContent = 'Mikrofon icazəsi verilmədi'; });
   }
   function stopRec(){
